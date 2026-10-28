@@ -22,7 +22,7 @@ COMMON=(--no-defaults --user=mysql --datadir="$DATADIR" --socket="$SOCK")
 # Cấu hình InnoDB nhẹ cho gói Free (512 MB RAM, CPU thấp): tắt native AIO, redo log nhỏ, không doublewrite.
 # Log của MySQL ghi thẳng ra stderr để hiển thị trong log Render.
 INNODB=(--performance-schema=OFF --innodb-use-native-aio=0 --innodb-buffer-pool-size=32M
-  --innodb-redo-log-capacity=8M --innodb-doublewrite=OFF --innodb-flush-log-at-trx-commit=2)
+  --innodb-redo-log-capacity=32M --innodb-doublewrite=OFF --innodb-flush-log-at-trx-commit=2)
 
 if [ ! -d "$DATADIR/mysql" ]; then
   echo "• Khởi tạo thư mục dữ liệu MySQL…"
