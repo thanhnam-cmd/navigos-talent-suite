@@ -21,21 +21,32 @@ COMMON=(--no-defaults --user=mysql --datadir="$DATADIR" --socket="$SOCK")
 
 if [ ! -d "$DATADIR/mysql" ]; then
   echo "• Khởi tạo thư mục dữ liệu MySQL…"
-  mysqld "${COMMON[@]}" --initialize-insecure --log-error=/tmp/mysqld-init.err || { cat /tmp/mysqld-init.err; exit 1; }
+  mysqld "${COMMON[@]}" --initialize-insecure --innodb-use-native-aio=0 --innodb-buffer-pool-size=32M \
+    --performance-schema=OFF --log-error=/tmp/mysqld-init.err || { cat /tmp/mysqld-init.err; exit 1; }
 fi
 
-echo "• Khởi động MySQL $(mysqld --version | awk '{print $3}')…"
+echo "• Khởi động MySQL $(mysqld --version | awk '{print $3}') — RAM máy: $(awk '/MemTotal/{print int($2/1024)" MB"}' /proc/meminfo)…"
+# Cấu hình bộ nhớ thấp để vừa gói Free 512 MB; tắt native AIO (một số môi trường container không hỗ trợ)
 mysqld "${COMMON[@]}" --port=3306 --bind-address=127.0.0.1 --mysqlx=0 \
   --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone=+00:00 \
-  --skip-log-bin --performance-schema=OFF --innodb-buffer-pool-size=64M --max-connections=40 \
-  --table-open-cache=256 --table-definition-cache=400 --log-error=/tmp/mysqld.err &
+  --skip-log-bin --skip-name-resolve --performance-schema=OFF --innodb-use-native-aio=0 \
+  --innodb-buffer-pool-size=32M --innodb-log-buffer-size=4M --key-buffer-size=4M \
+  --temptable-max-ram=16M --tmp-table-size=8M --max-heap-table-size=8M \
+  --max-connections=30 --thread-cache-size=4 --table-open-cache=200 --table-definition-cache=400 \
+  --log-error=/tmp/mysqld.err &
 MYSQL_PID=$!
 
 for i in $(seq 1 120); do
   mysqladmin --socket="$SOCK" ping >/dev/null 2>&1 && break
-  kill -0 "$MYSQL_PID" 2>/dev/null || { echo "✖ MySQL dừng bất thường:"; cat /tmp/mysqld.err; exit 1; }
+  if ! kill -0 "$MYSQL_PID" 2>/dev/null; then
+    set +e; wait "$MYSQL_PID"; CODE=$?; set -e
+    echo "✖ MySQL dừng bất thường (mã thoát $CODE; 137 = bị dừng do thiếu RAM):"; cat /tmp/mysqld.err
+    grep -E 'MemTotal|MemAvailable' /proc/meminfo || true
+    exit 1
+  fi
   sleep 1
 done
+echo "• MySQL đã nhận kết nối sau ${i} giây"
 
 # Lần đầu (root chưa có mật khẩu): đặt mật khẩu root
 if mysql --socket="$SOCK" -uroot -e "SELECT 1" >/dev/null 2>&1; then
