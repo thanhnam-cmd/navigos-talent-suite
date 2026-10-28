@@ -19,33 +19,38 @@ chown -R mysql:mysql "$(dirname "$DATADIR")" /var/run/mysqld
 
 COMMON=(--no-defaults --user=mysql --datadir="$DATADIR" --socket="$SOCK")
 
+# Cấu hình InnoDB nhẹ cho gói Free (512 MB RAM, CPU thấp): tắt native AIO, redo log nhỏ, không doublewrite.
+# Log của MySQL ghi thẳng ra stderr để hiển thị trong log Render.
+INNODB=(--performance-schema=OFF --innodb-use-native-aio=0 --innodb-buffer-pool-size=32M
+  --innodb-redo-log-capacity=8M --innodb-doublewrite=OFF --innodb-flush-log-at-trx-commit=2)
+
 if [ ! -d "$DATADIR/mysql" ]; then
   echo "• Khởi tạo thư mục dữ liệu MySQL…"
-  mysqld "${COMMON[@]}" --initialize-insecure --innodb-use-native-aio=0 --innodb-buffer-pool-size=32M \
-    --performance-schema=OFF --log-error=/tmp/mysqld-init.err || { cat /tmp/mysqld-init.err; exit 1; }
+  rm -rf "${DATADIR:?}"/*
+  mysqld "${COMMON[@]}" "${INNODB[@]}" --initialize-insecure --console
+  echo "• Khởi tạo xong"
 fi
 
-echo "• Khởi động MySQL $(mysqld --version | awk '{print $3}') — RAM máy: $(awk '/MemTotal/{print int($2/1024)" MB"}' /proc/meminfo)…"
-# Cấu hình bộ nhớ thấp để vừa gói Free 512 MB; tắt native AIO (một số môi trường container không hỗ trợ)
-mysqld "${COMMON[@]}" --port=3306 --bind-address=127.0.0.1 --mysqlx=0 \
+echo "• Khởi động MySQL $(mysqld --version | awk '{print $3}')…"
+mysqld "${COMMON[@]}" "${INNODB[@]}" --console --port=3306 --bind-address=127.0.0.1 --mysqlx=0 \
   --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone=+00:00 \
-  --skip-log-bin --skip-name-resolve --performance-schema=OFF --innodb-use-native-aio=0 \
-  --innodb-buffer-pool-size=32M --innodb-log-buffer-size=4M --key-buffer-size=4M \
+  --skip-log-bin --skip-name-resolve --innodb-log-buffer-size=4M --key-buffer-size=4M \
   --temptable-max-ram=16M --tmp-table-size=8M --max-heap-table-size=8M \
-  --max-connections=30 --thread-cache-size=4 --table-open-cache=200 --table-definition-cache=400 \
-  --log-error=/tmp/mysqld.err &
+  --max-connections=30 --thread-cache-size=4 --table-open-cache=200 --table-definition-cache=400 &
 MYSQL_PID=$!
 
-for i in $(seq 1 120); do
-  mysqladmin --socket="$SOCK" ping >/dev/null 2>&1 && break
+READY=0
+for i in $(seq 1 300); do
+  if timeout 5 mysqladmin --connect-timeout=3 --socket="$SOCK" ping >/dev/null 2>&1; then READY=1; break; fi
   if ! kill -0 "$MYSQL_PID" 2>/dev/null; then
     set +e; wait "$MYSQL_PID"; CODE=$?; set -e
-    echo "✖ MySQL dừng bất thường (mã thoát $CODE; 137 = bị dừng do thiếu RAM):"; cat /tmp/mysqld.err
-    grep -E 'MemTotal|MemAvailable' /proc/meminfo || true
+    echo "✖ MySQL dừng bất thường (mã thoát $CODE; 137 = bị dừng do thiếu RAM)"
     exit 1
   fi
+  [ $((i % 15)) -eq 0 ] && echo "  … chờ MySQL (${i}s)"
   sleep 1
 done
+[ "$READY" = 1 ] || { echo "✖ MySQL không sẵn sàng sau 300 giây"; exit 1; }
 echo "• MySQL đã nhận kết nối sau ${i} giây"
 
 # Lần đầu (root chưa có mật khẩu): đặt mật khẩu root
