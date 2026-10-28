@@ -1,0 +1,30 @@
+# Render Blueprint — Navigos Talent Suite (Node.js + MySQL 8)
+# Render không có MySQL được quản lý: dùng MySQL cloud bên ngoài (VD: Aiven for MySQL — gói Free)
+# và khai báo chuỗi kết nối ở biến DATABASE_URL khi tạo Blueprint.
+services:
+  - type: web
+    name: navigos-talent-suite
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: MYSQL_MANAGED
+        value: "false"
+      - key: DEMO_MODE
+        value: "true"
+      # mysql://USER:PASSWORD@HOST:PORT/defaultdb?ssl-mode=REQUIRED  (lấy từ trang dịch vụ Aiven)
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSL
+        value: "true"
+      # (Tùy chọn) nội dung chứng chỉ CA của Aiven để xác thực máy chủ MySQL
+      - key: DB_SSL_CA
+        sync: false
