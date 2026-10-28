@@ -1,0 +1,9 @@
+.git
+node_modules
+.env
+database/mysql-data
+database/my.ini
+database/*.log
+logs
+navigos-talent
+*.log

@@ -35,7 +35,7 @@ mysql -u root -p navigos_talent < database/schema.sql
 
 ## Deploy (GitHub + Render)
 
-Web Node.js chạy trên Render (cấu hình sẵn trong `render.yaml`), CSDL MySQL 8 trên dịch vụ cloud (VD: Aiven). Lần khởi động đầu máy chủ tự tạo bảng và nạp dữ liệu mẫu. Xem hướng dẫn từng bước: [docs/DEPLOY.md](docs/DEPLOY.md).
+Deploy lên Render bằng Docker: MySQL 8 và Node.js chạy chung một dịch vụ (`Dockerfile`, `docker/start.sh`, `render.yaml`) — không cần dịch vụ CSDL bên ngoài. Lần khởi động đầu máy chủ tự tạo bảng và nạp dữ liệu mẫu. Xem hướng dẫn từng bước: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Lệnh
 

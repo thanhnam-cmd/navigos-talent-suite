@@ -1,32 +1,33 @@
-# Deploy lên Render + MySQL cloud
+# Deploy lên Render (MySQL 8 chạy trong cùng dịch vụ)
 
-Render chạy web Node.js; **Render không cung cấp MySQL được quản lý**, nên CSDL MySQL 8 đặt ở một dịch vụ cloud. Hướng dẫn dưới đây dùng **Aiven for MySQL** (gói Free, MySQL 8 thật, bắt buộc SSL). Bất kỳ MySQL 8 nào truy cập được từ Internet cũng dùng được qua `DATABASE_URL`.
+Render không có MySQL được quản lý, nên dự án đóng gói **MySQL 8.0 + Node.js trong một container Docker** (`Dockerfile`, `docker/start.sh`). Không cần đăng ký dịch vụ CSDL nào khác.
 
-## 1. Tạo MySQL trên Aiven
+Khi container khởi động: khởi tạo MySQL (chỉ nghe `127.0.0.1` bên trong container) → tạo CSDL `navigos_talent` và tài khoản ứng dụng → máy chủ Node.js tự tạo bảng từ `database/schema.sql` và nạp dữ liệu mẫu → mở web ở cổng Render cấp.
 
-1. Đăng ký tại https://console.aiven.io → **Create service** → **MySQL** → gói **Free**, vùng gần Singapore.
-2. Khi dịch vụ ở trạng thái *Running*, mở tab **Overview** → **Connection information**, sao chép **Service URI** dạng:
-   `mysql://avnadmin:MẬT_KHẨU@mysql-xxxx.aivencloud.com:12345/defaultdb?ssl-mode=REQUIRED`
-3. (Tùy chọn, an toàn hơn) Tải **CA certificate** — dán nội dung vào biến `DB_SSL_CA` ở bước 2.
-
-Không cần chạy SQL thủ công: lần khởi động đầu, máy chủ tự tạo bảng từ `database/schema.sql` và nạp dữ liệu mẫu.
-
-## 2. Tạo dịch vụ trên Render
+## Các bước
 
 1. Đăng nhập https://dashboard.render.com bằng GitHub.
-2. **New → Blueprint** → chọn repository này → Render đọc `render.yaml`.
-3. Nhập biến **`DATABASE_URL`** = Service URI ở bước 1 (và `DB_SSL_CA` nếu có) → **Apply**.
-4. Chờ build xong, mở địa chỉ `https://navigos-talent-suite.onrender.com` (tên có thể khác).
+2. **New → Blueprint** → chọn repository `navigos-talent-suite` (lần đầu: cho phép Render truy cập repo).
+3. Render đọc `render.yaml` → **Apply**. Mật khẩu MySQL (`DB_PASSWORD`, `DB_ROOT_PASSWORD`) được Render tự sinh.
+4. Chờ build (lần đầu ~5–10 phút) → mở `https://navigos-talent-suite.onrender.com`.
 
-Mỗi lần `git push` lên nhánh chính, Render tự deploy lại (`autoDeploy: true`).
+Mỗi lần `git push` lên `main`, Render tự build & deploy lại.
 
-## Ghi chú
+## Lưu trữ dữ liệu
 
-- Gói Free của Render **ngủ sau ~15 phút không truy cập**; lần mở đầu tiên mất 30–60 giây để khởi động.
-- Phiên đăng nhập lưu trong bộ nhớ máy chủ → sau khi dịch vụ ngủ/khởi động lại cần đăng nhập lại. Dữ liệu vẫn nằm an toàn trong MySQL.
-- `DEMO_MODE=true` bật nút chuyển nhanh tài khoản & khôi phục dữ liệu mẫu. Khi dùng thật, đặt `DEMO_MODE=false` và đổi mật khẩu các tài khoản demo.
-- Kiểm tra bản đã deploy từ máy:
+| Gói Render | Dữ liệu MySQL |
+|---|---|
+| **Free** (mặc định) | Không có ổ đĩa: dữ liệu được khởi tạo lại kèm dữ liệu mẫu mỗi khi dịch vụ khởi động (sau khi ngủ ~15 phút không truy cập, hoặc sau mỗi lần deploy). Phù hợp demo/bảo vệ. |
+| **Starter + Disk** (trả phí) | Trong `render.yaml` đổi `plan: starter` và bỏ comment khối `disk` (gắn vào `/var/lib/mysql`) → dữ liệu giữ vĩnh viễn. |
+
+## Dùng MySQL bên ngoài (tùy chọn)
+
+Đặt biến `DATABASE_URL=mysql://USER:PASS@HOST:PORT/DB?ssl-mode=REQUIRED` (và `DB_SSL_CA` nếu có) — máy chủ sẽ dùng CSDL đó thay cho MySQL trong container.
+
+## Kiểm tra bản đã deploy
 
 ```bash
 SMOKE_URL=https://navigos-talent-suite.onrender.com npm test
 ```
+
+(Bước đối chiếu trực tiếp trong MySQL chỉ chạy được khi máy bạn truy cập được CSDL.)
