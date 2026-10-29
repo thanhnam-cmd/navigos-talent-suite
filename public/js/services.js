@@ -54,6 +54,49 @@ const Q = {
   canHandleCt(ct) { return Auth.isLead() || this.visibleCts().some((c) => c.id === ct.id); },
   age(uv) { return uv.nam_sinh ? now().getFullYear() - uv.nam_sinh : null; },
   isNormalized(uv) { return !!uv.ma_nhan_su; },
+  /* ---------- Xếp lịch phỏng vấn — BR10-2, BR10-5, BR10-6 ---------- */
+  RULE_DEFAULTS: { khoang_nghi_phut: 30, di_chuyen_phut: 90, gio_bat_dau: '08:00', gio_ket_thuc: '18:00', canh_bao_cuoi_tuan: 1, so_buoi_toi_da: 4 },
+  /** Quy tắc xếp lịch đang áp dụng (màn hình "Quy tắc xếp lịch phỏng vấn") */
+  rules() { return { ...this.RULE_DEFAULTS, ...(DB.quy_tac_xep_lich?.[0] || {}) }; },
+  /** Nhân viên phỏng vấn mặc định = nhân viên phụ trách dự án (ưu tiên chính người đang thao tác nếu cũng phụ trách) */
+  defaultInterviewer(ct) { const a = this.assignees(ct.id); return a.find((n) => n.id === Auth.user?.id) || a[0] || null; },
+  /** Khu vực của buổi phỏng vấn trực tiếp = khu vực làm việc của vị trí; phỏng vấn trực tuyến không cần di chuyển */
+  lichRegion(l) { return l.hinh_thuc === 'Trực tiếp' ? this.ct(this.hs(l.ma_ho_so_ung_vien)?.ma_chi_tiet_du_an)?.ma_khu_vuc ?? null : null; },
+  /** Kiểm tra lịch của MỘT nhân viên phỏng vấn: trùng lịch = lỗi (BR10-2), các trường hợp còn lại = cảnh báo (BR10-6) */
+  scheduleCheck({ nsId, bd, kt, hinh_thuc, ctId, exceptId = null }) {
+    const R = this.rules(); const region = hinh_thuc === 'Trực tiếp' ? this.ct(ctId)?.ma_khu_vuc : null;
+    const mine = DB.lich_phong_van.filter((l) => l.id !== exceptId && l.ma_nhan_su === Number(nsId) && l.trang_thai !== ST.LICH.HUY);
+    const conflicts = mine.filter((l) => l.trang_thai === ST.LICH.LEN && new Date(l.thoi_gian_bat_dau) < kt && new Date(l.thoi_gian_ket_thuc) > bd);
+    const label = (l) => `${fmtTime(l.thoi_gian_bat_dau)}–${fmtTime(l.thoi_gian_ket_thuc)} với ${this.uv(this.hs(l.ma_ho_so_ung_vien).ma_ung_vien).ho_ten}`;
+    const sameDay = mine.filter((l) => toDateStr(l.thoi_gian_bat_dau) === toDateStr(bd));
+    const warnings = [];
+    sameDay.filter((l) => !conflicts.includes(l)).forEach((l) => {
+      const s = new Date(l.thoi_gian_bat_dau), e = new Date(l.thoi_gian_ket_thuc);
+      const gap = e <= bd ? (bd - e) / 60000 : s >= kt ? (s - kt) / 60000 : null;
+      if (gap === null) return;
+      const r2 = this.lichRegion(l);
+      if (region && r2 && region !== r2 && gap < R.di_chuyen_phut)
+        warnings.push({ loai: 'Di chuyển', text: `Thiếu thời gian di chuyển ${Store.name('khu_vuc', r2)} ↔ ${Store.name('khu_vuc', region)}: chỉ cách buổi ${label(l)} ${Math.round(gap)} phút (cần ≥ ${R.di_chuyen_phut} phút).` });
+      else if (gap < R.khoang_nghi_phut)
+        warnings.push({ loai: 'Khoảng nghỉ', text: `Khoảng nghỉ với buổi ${label(l)} chỉ ${Math.round(gap)} phút (tối thiểu ${R.khoang_nghi_phut} phút).` });
+    });
+    if (fmtTime(bd) < R.gio_bat_dau || fmtTime(kt) > R.gio_ket_thuc || toDateStr(kt) !== toDateStr(bd))
+      warnings.push({ loai: 'Ngoài giờ', text: `Ngoài giờ làm việc (${R.gio_bat_dau}–${R.gio_ket_thuc}).` });
+    if (Number(R.canh_bao_cuoi_tuan) && [0, 6].includes(new Date(bd).getDay()))
+      warnings.push({ loai: 'Cuối tuần', text: `Lịch rơi vào cuối tuần (${new Date(bd).getDay() === 0 ? 'Chủ nhật' : 'Thứ bảy'}).` });
+    if (sameDay.length + 1 > R.so_buoi_toi_da)
+      warnings.push({ loai: 'Số buổi', text: `Vượt số buổi tối đa trong ngày: ${sameDay.length + 1}/${R.so_buoi_toi_da} buổi.` });
+    return { conflicts, warnings };
+  },
+  /** Gợi ý nhân viên KHÔNG trùng lịch trong khung giờ khách hàng chốt (cùng khu vực, ít cảnh báo trước) */
+  freeInterviewers({ bd, kt, hinh_thuc, ctId, exceptId = null }) {
+    const ct = this.ct(ctId); const asg = new Set(this.assignees(ctId).map((n) => n.id));
+    return DB.nhan_su.filter((n) => n.trang_thai_lam_viec === 'Đang làm việc' && (n.vai_tro === ROLES.NV || asg.has(n.id)))
+      .map((n) => ({ n, chk: this.scheduleCheck({ nsId: n.id, bd, kt, hinh_thuc, ctId, exceptId }) }))
+      .filter((x) => !x.chk.conflicts.length)
+      .sort((a, b) => (b.n.ma_khu_vuc === ct.ma_khu_vuc) - (a.n.ma_khu_vuc === ct.ma_khu_vuc) || asg.has(b.n.id) - asg.has(a.n.id) || a.chk.warnings.length - b.chk.warnings.length)
+      .map((x) => ({ id: x.n.id, ho_ten: x.n.ho_ten, khu_vuc: Store.name('khu_vuc', x.n.ma_khu_vuc), canh_bao: x.chk.warnings.length }));
+  },
   /** Độ phù hợp ứng viên – vị trí (gợi ý xếp hạng khi lọc) */
   fit(uv, ct) {
     if (!ct) return null; let s = 0, t = 0;
@@ -206,7 +249,7 @@ const Svc = {
 
   /* ===== UC_05 Phân công — BR5-1..4 ===== */
   assign(ctId, staffIds, replace = false) {
-    if (!Auth.isLead() && !App.seeding) return fail('Chỉ Ban Giám đốc / Trưởng nhóm được phân công (BR5-1).');
+    if (!Auth.isLead() && !App.seeding) return fail('Chỉ Ban Giám đốc / Quản lý được phân công (BR5-1).');
     staffIds = (staffIds || []).map(Number).filter(Boolean);
     if (!staffIds.length) return fail('Chưa chọn nhân viên phụ trách.');
     const ct = Q.ct(ctId); if (CT_CLOSED.includes(ct.trang_thai)) return fail('Dự án đã kết thúc, không thể phân công.');
@@ -393,19 +436,19 @@ const Svc = {
       const d = Store.insert('de_cu', { ma_ho_so_ung_vien: hs.id, ma_nguoi_tao: Auth.user.id, ma_nguoi_duyet: null, dot_de_cu: info.dot_de_cu, trang_thai: ST.DC.CHO,
         so_nam_kinh_nghiem: info.per?.[id]?.exp ?? uv.so_nam_kinh_nghiem, muc_luong_mong_muon: info.per?.[id]?.salary ? Number(info.per[id].salary) : null, notice_period: info.per?.[id]?.notice || info.notice_period || '',
         ngay_tao: nowISO(), ngay_duyet: null, ngay_gui_khach_hang: null, phan_hoi_khach_hang: null, ngay_phan_hoi: null, ly_do_loai: null, ghi_chu: info.ghi_chu || '' });
-      logStatus(hs, ST.HS.DECU, `Tạo đề cử ${info.dot_de_cu} — chờ Trưởng nhóm duyệt`);
+      logStatus(hs, ST.HS.DECU, `Tạo đề cử ${info.dot_de_cu} — chờ Quản lý duyệt`);
       created.push(d);
     });
     Store.save(); return { ok: created.length > 0, created, skipped, error: created.length ? null : 'Không tạo được đề cử nào.' };
   },
   /** UC_06 bước 8 — Duyệt / Yêu cầu chỉnh sửa (BR6-4) */
   approveRecommendation(id) {
-    if (!Auth.isLead() && !App.seeding) return fail('Chỉ Ban Giám đốc / Trưởng nhóm được duyệt đề cử (BR6-4).');
+    if (!Auth.isLead() && !App.seeding) return fail('Chỉ Ban Giám đốc / Quản lý được duyệt đề cử (BR6-4).');
     const d = Store.get('de_cu', id); if (d.trang_thai !== ST.DC.CHO) return fail('Đề cử không ở trạng thái Chờ duyệt.');
     Object.assign(d, { trang_thai: ST.DC.DUYET, ma_nguoi_duyet: Auth.user.id, ngay_duyet: nowISO() }); Store.save(); return { ok: true };
   },
   requestEdit(id, reason) {
-    if (!Auth.isLead()) return fail('Chỉ Ban Giám đốc / Trưởng nhóm được yêu cầu chỉnh sửa.');
+    if (!Auth.isLead()) return fail('Chỉ Ban Giám đốc / Quản lý được yêu cầu chỉnh sửa.');
     if (!reason) return fail('Nhập lý do yêu cầu chỉnh sửa.');
     const d = Store.get('de_cu', id); if (d.trang_thai !== ST.DC.CHO) return fail('Đề cử không ở trạng thái Chờ duyệt.');
     Object.assign(d, { trang_thai: ST.DC.SUA, ma_nguoi_duyet: Auth.user.id, ngay_duyet: nowISO(), ghi_chu: [d.ghi_chu, `Yêu cầu sửa (${Auth.user.ho_ten}): ${reason}`].filter(Boolean).join(' | ') });
@@ -428,7 +471,7 @@ const Svc = {
   sendToClient(ids) {
     const sent = [], err = [];
     ids.forEach((id) => { const d = Store.get('de_cu', id); if (d.trang_thai !== ST.DC.DUYET) { err.push(d); return; } d.trang_thai = ST.DC.GUI; d.ngay_gui_khach_hang = nowISO(); sent.push(d); });
-    Store.save(); if (!sent.length) return fail('Đề cử cần được Trưởng nhóm duyệt trước khi gửi khách hàng (BR7-1).');
+    Store.save(); if (!sent.length) return fail('Đề cử cần được Quản lý duyệt trước khi gửi khách hàng (BR7-1).');
     return { ok: true, sent: sent.length, blocked: err.length };
   },
   /** UC_07 — Ghi nhận phản hồi khách hàng (BR7-2, BR7-3) */
@@ -443,9 +486,12 @@ const Svc = {
     Store.save(); return { ok: true };
   },
 
-  /* ===== UC_10 Lịch phỏng vấn — BR10-1..4 ===== */
+  /* ===== UC_10 Lịch phỏng vấn — BR10-1..6 =====
+     Lịch do khách hàng chốt → hệ thống KHÔNG đổi giờ. Nhân viên phỏng vấn mặc định là người phụ trách dự án;
+     trùng lịch là lỗi (không lưu, đề nghị nhân viên khác); các cảnh báo xếp lịch cần người dùng xác nhận. */
   saveInterview(hsId, data, id = null) {
-    const hs = Q.hs(hsId); const e = {};
+    const hs = Q.hs(hsId); const ct = Q.ct(hs?.ma_chi_tiet_du_an); const e = {};
+    if (!ct || !Q.assignees(ct.id).length) return fail('Dự án chưa có nhân viên phụ trách — cần Quản lý phân công trước khi lên lịch phỏng vấn.');
     if (!id) {
       const dc = Q.latestDeCu(hs.id);
       const allowed = hs.trang_thai === ST.HS.PV || (hs.trang_thai === ST.HS.DECU && dc?.phan_hoi_khach_hang === 'Đồng ý phỏng vấn');
@@ -454,21 +500,44 @@ const Svc = {
       if (last && last.trang_thai === ST.LICH.LEN) return fail('Hồ sơ đang có lịch chưa diễn ra. Cập nhật hoặc hủy lịch đó trước.');
       if (lastKq && lastKq.ket_qua === 'Đạt') return fail('Ứng viên đã Đạt phỏng vấn — đang chờ kết quả tuyển dụng từ khách hàng.');
     }
-    ['ngay', 'gio_bd', 'gio_kt', 'hinh_thuc', 'ma_nhan_su'].forEach((k) => { if (!data[k]) e[k] = 'Bắt buộc nhập.'; });
-    const bd = data.ngay && data.gio_bd ? new Date(`${data.ngay}T${data.gio_bd}`) : null; const kt = data.ngay && data.gio_kt ? new Date(`${data.ngay}T${data.gio_kt}`) : null;
+    [...(data.bd_iso && data.kt_iso ? [] : ['ngay', 'gio_bd', 'gio_kt']), 'hinh_thuc', 'ma_nhan_su'].forEach((k) => { if (!data[k]) e[k] = 'Bắt buộc nhập.'; });
+    // Trình duyệt gửi kèm mốc thời gian ISO (đúng múi giờ người dùng); dự phòng ghép ngày + giờ
+    const at = (iso, d, t) => { const x = iso ? new Date(iso) : d && t ? new Date(`${d}T${t}`) : null; return x && !isNaN(x) ? x : null; };
+    const bd = at(data.bd_iso, data.ngay, data.gio_bd); const kt = at(data.kt_iso, data.ngay, data.gio_kt);
     if (bd && kt && kt <= bd) e.gio_kt = 'Thời gian kết thúc phải sau thời gian bắt đầu.';
     if (data.hinh_thuc === 'Trực tuyến' && !/^https?:\/\//i.test(data.dia_diem_link || '')) e.dia_diem_link = 'Phỏng vấn trực tuyến cần đường dẫn hợp lệ (BR10-3).';
     if (data.hinh_thuc === 'Trực tiếp' && !data.dia_diem_link) e.dia_diem_link = 'Nhập địa điểm phỏng vấn.';
+    const ns = Q.ns(data.ma_nhan_su);
+    if (data.ma_nhan_su && (!ns || ns.trang_thai_lam_viec !== 'Đang làm việc')) e.ma_nhan_su = 'Nhân viên phỏng vấn phải đang làm việc (BR10-5).';
     if (Object.keys(e).length) return bad(e);
-    // BR10-2 — trùng lịch của nhân viên phụ trách
-    const clash = DB.lich_phong_van.find((l) => l.id !== id && l.ma_nhan_su === Number(data.ma_nhan_su) && l.trang_thai === ST.LICH.LEN && new Date(l.thoi_gian_bat_dau) < kt && new Date(l.thoi_gian_ket_thuc) > bd);
-    if (clash) { const c = Q.uv(Q.hs(clash.ma_ho_so_ung_vien).ma_ung_vien); return bad({ gio_bd: `Trùng lịch: ${Q.ns(clash.ma_nhan_su).ho_ten} đã có lịch với ${c.ho_ten} (${fmtTime(clash.thoi_gian_bat_dau)}–${fmtTime(clash.thoi_gian_ket_thuc)} ${fmtDate(clash.thoi_gian_bat_dau)}).` }); }
+    // Bước 2–3: kiểm tra trùng lịch của nhân viên phỏng vấn (lỗi) và cảnh báo xếp lịch
+    const chk = Q.scheduleCheck({ nsId: ns.id, bd, kt, hinh_thuc: data.hinh_thuc, ctId: ct.id, exceptId: id });
+    if (chk.conflicts.length) {
+      const c = chk.conflicts[0]; const cu = Q.uv(Q.hs(c.ma_ho_so_ung_vien).ma_ung_vien);
+      return { ok: false, conflict: true, free: Q.freeInterviewers({ bd, kt, hinh_thuc: data.hinh_thuc, ctId: ct.id, exceptId: id }).slice(0, 6),
+        errors: { ma_nhan_su: `Trùng lịch: ${ns.ho_ten} đã có buổi phỏng vấn ${cu.ho_ten} (${fmtTime(c.thoi_gian_bat_dau)}–${fmtTime(c.thoi_gian_ket_thuc)} ${fmtDate(c.thoi_gian_bat_dau)}). Không thể lưu — hãy chọn nhân viên khác; thời gian giữ nguyên vì do khách hàng quyết định (BR10-5).` } };
+    }
+    if (chk.warnings.length && !data.xac_nhan_canh_bao) return { ok: false, needConfirm: true, warnings: chk.warnings };
     const row = { ma_nhan_su: Number(data.ma_nhan_su), thoi_gian_bat_dau: bd.toISOString(), thoi_gian_ket_thuc: kt.toISOString(), hinh_thuc: data.hinh_thuc, dia_diem_link: data.dia_diem_link, nguoi_tham_gia: data.nguoi_tham_gia };
     if (id) { const l = Store.get('lich_phong_van', id); if (l.trang_thai !== ST.LICH.LEN) return fail('Chỉ sửa lịch “Đã lên lịch” (BR10-4).'); Object.assign(l, row); Store.save(); return { ok: true, row: l }; }
     const vong = Q.lichOfHs(hs.id).filter((l) => l.trang_thai !== ST.LICH.HUY).length + 1;
     const l = Store.insert('lich_phong_van', { ma_ho_so_ung_vien: hs.id, ...row, trang_thai: ST.LICH.LEN, vong });
-    if (hs.trang_thai !== ST.HS.PV) logStatus(hs, ST.HS.PV, `Lên lịch phỏng vấn vòng ${vong} – ${fmtDT(bd)}`);
-    Store.save(); return { ok: true, row: l };
+    if (hs.trang_thai !== ST.HS.PV) logStatus(hs, ST.HS.PV, `Lên lịch phỏng vấn vòng ${vong} – ${fmtDT(bd)} – NV phỏng vấn: ${ns.ho_ten}`);
+    Store.save(); return { ok: true, row: l, warnings: chk.warnings };
+  },
+  /** Màn hình "Quy tắc xếp lịch phỏng vấn" — BR10-6 */
+  saveScheduleRules(data) {
+    if (!Auth.isAdmin() && !Auth.isLead()) return fail('Chỉ Quản trị viên, Ban Giám đốc / Quản lý được cấu hình quy tắc xếp lịch.');
+    const e = {}; const n = (k, lo, hi) => { const v = Number(data[k]); if (data[k] === '' || isNaN(v) || v < lo || v > hi) e[k] = `Nhập số từ ${lo} đến ${hi}.`; return Math.round(v); };
+    const row = { khoang_nghi_phut: n('khoang_nghi_phut', 0, 240), di_chuyen_phut: n('di_chuyen_phut', 0, 720), so_buoi_toi_da: n('so_buoi_toi_da', 1, 20),
+      gio_bat_dau: data.gio_bat_dau, gio_ket_thuc: data.gio_ket_thuc, canh_bao_cuoi_tuan: data.canh_bao_cuoi_tuan ? 1 : 0 };
+    ['gio_bat_dau', 'gio_ket_thuc'].forEach((k) => { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(row[k] || '')) e[k] = 'Giờ dạng HH:MM.'; });
+    if (!e.gio_bat_dau && !e.gio_ket_thuc && row.gio_bat_dau >= row.gio_ket_thuc) e.gio_ket_thuc = 'Giờ kết thúc phải sau giờ bắt đầu.';
+    if (Object.keys(e).length) return bad(e);
+    const meta = { ngay_cap_nhat: nowISO(), ma_nguoi_cap_nhat: Auth.user?.id ?? null };
+    const cur = DB.quy_tac_xep_lich[0];
+    if (cur) Object.assign(cur, row, meta); else Store.insert('quy_tac_xep_lich', { ...row, ...meta });
+    Store.save(); return { ok: true };
   },
   cancelInterview(id, reason) {
     const l = Store.get('lich_phong_van', id); if (l.trang_thai !== ST.LICH.LEN) return fail('Chỉ hủy lịch “Đã lên lịch” (BR10-4).');
@@ -619,7 +688,7 @@ const Shell = {
     Q.visibleCts().forEach((ct) => { const dl = Q.deadline(ct); if (dl) out.push({ ic: 'clock', tone: dl.level, title: `${ct.vi_tri} — ${dl.text}`, desc: `${Code.ct(ct.id)} · ${Q.khOfCt(ct)?.ten_cong_ty} · ${Q.hired(ct.id)}/${ct.so_luong} đã nhận việc`, href: '#/du-an/' + ct.id }); });
     if (Auth.isLead() && c.choPhanCong) out.push({ ic: 'userCheck', tone: 'blue', title: `${c.choPhanCong} vị trí mới tiếp nhận chờ phân công`, desc: 'Phân công nhân viên phụ trách để bắt đầu thực hiện', href: '#/du-an?tab=phan-cong' });
     if (Auth.isLead() && c.choDuyet) out.push({ ic: 'send', tone: 'amber', title: `${c.choDuyet} đề cử chờ duyệt`, desc: 'Duyệt hoặc yêu cầu chỉnh sửa trước khi gửi khách hàng', href: '#/de-cu?tab=cho-duyet' });
-    if (c.canSua) out.push({ ic: 'edit', tone: 'red', title: `${c.canSua} đề cử cần chỉnh sửa`, desc: 'Trưởng nhóm đã yêu cầu chỉnh sửa', href: '#/de-cu?tab=can-sua' });
+    if (c.canSua) out.push({ ic: 'edit', tone: 'red', title: `${c.canSua} đề cử cần chỉnh sửa`, desc: 'Quản lý đã yêu cầu chỉnh sửa', href: '#/de-cu?tab=can-sua' });
     if (c.pvHomNay) out.push({ ic: 'calendar', tone: 'violet', title: `${c.pvHomNay} buổi phỏng vấn hôm nay`, desc: 'Xem lịch và chuẩn bị tham gia cùng khách hàng', href: '#/phong-van' });
     if (c.choGan) out.push({ ic: 'inbox', tone: 'amber', title: `${c.choGan} hồ sơ apply chờ gán dự án`, desc: 'Mã tin chưa đối chiếu được với dự án nào', href: '#/thu-thap?tab=cho-gan' });
     return out;
@@ -635,7 +704,7 @@ const Shell = {
     if ($('.dropdown.umenu')) return $$('.dropdown').forEach((d) => d.remove()); $$('.dropdown').forEach((d) => d.remove());
     const dd = document.createElement('div'); dd.className = 'dropdown umenu'; dd.style.width = '300px';
     const others = DB.nhan_su.filter((n) => n.trang_thai_lam_viec === 'Đang làm việc' && n.id !== Auth.user.id);
-    const pick = [ROLES.ADMIN, ROLES.BGD, ROLES.TN, ROLES.NV].map((r) => others.find((n) => n.vai_tro === r)).filter(Boolean);
+    const pick = [ROLES.ADMIN, ROLES.BGD, ROLES.QL, ROLES.NV].map((r) => others.find((n) => n.vai_tro === r)).filter(Boolean);
     dd.innerHTML = `<div class="dd-head"><div><div>${esc(Auth.user.ho_ten)}</div><div class="muted small" style="font-weight:500">${esc(Auth.user.email)}</div></div></div>
       <div class="nav-label" style="padding:10px 16px 4px">Chuyển nhanh tài khoản demo</div>
       ${pick.map((n) => `<div class="menu-item" data-uid="${n.id}">${avatar(n.ho_ten, 'sm')}<div><div class="small strong">${esc(n.ho_ten)}</div><div class="muted small">${esc(n.vai_tro)}</div></div></div>`).join('')}

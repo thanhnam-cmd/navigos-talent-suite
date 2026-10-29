@@ -19,6 +19,7 @@ COPY . .
 RUN chmod +x docker/start.sh
 
 ENV NODE_ENV=production \
+    TZ=Asia/Ho_Chi_Minh \
     MYSQL_MANAGED=false \
     DB_HOST=127.0.0.1 \
     DB_PORT=3306 \

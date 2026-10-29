@@ -56,19 +56,22 @@ const Seed = (() => {
     ['Thực tập sinh', 'Nhân viên', 'Trưởng nhóm', 'Quản lý', 'Giám đốc'].forEach((ten, i) => ins('cap_bac', { ten, bac: i + 1 }));
     ['Công nghệ thông tin', 'Kế toán - Tài chính', 'Kinh doanh - Sales', 'Marketing', 'Nhân sự', 'Sản xuất - Kỹ thuật', 'Data - AI', 'Logistics - Chuỗi cung ứng'].forEach((ten) => ins('chuyen_mon', { ten }));
 
+    /* --- Quy tắc xếp lịch phỏng vấn (BR10-6) --- */
+    ins('quy_tac_xep_lich', { ...Q.RULE_DEFAULTS, ngay_cap_nhat: nowISO(), ma_nguoi_cap_nhat: null });
+
     /* --- Nhân sự (mật khẩu demo: 123456) --- */
     const pw = hashPw('123456');
     const NS = (ho_ten, ten_dang_nhap, vai_tro, chuc_vu, kv, email, tt = 'Đang làm việc') => ins('nhan_su', { ho_ten, ten_dang_nhap, mat_khau: pw, email, so_dien_thoai: '09' + int(10000000, 99999999), chuc_vu, vai_tro, ma_khu_vuc: kv, trang_thai_lam_viec: tt });
     const admin = NS('Nguyễn Quản Trị', 'admin', ROLES.ADMIN, 'Chuyên viên IT', 1, 'admin@navigosgroup.com');
     const gd = NS('Trần Minh Đức', 'giamdoc', ROLES.BGD, 'Giám đốc Navigos Search', 1, 'duc.tran@navigosgroup.com');
-    const tn = NS('Dương Kim Chi', 'truongnhom', ROLES.TN, 'Trưởng nhóm tư vấn tuyển dụng', 1, 'chi.duong@navigosgroup.com');
+    const tn = NS('Dương Kim Chi', 'quanly', ROLES.QL, 'Quản lý tư vấn tuyển dụng', 1, 'chi.duong@navigosgroup.com');
     const tram = NS('Đào Bích Trâm', 'nhanvien', ROLES.NV, 'Senior Consultant', 1, 'tram.dao@navigosgroup.com');
     const ha = NS('Phạm Thu Hà', 'thuha', ROLES.NV, 'Consultant', 1, 'ha.pham@navigosgroup.com');
     const phuc = NS('Lê Hoàng Phúc', 'hoangphuc', ROLES.NV, 'Senior Consultant', 2, 'phuc.le@navigosgroup.com');
     const tam = NS('Võ Thanh Tâm', 'thanhtam', ROLES.NV, 'Consultant', 2, 'tam.vo@navigosgroup.com');
     const bao = NS('Ngô Gia Bảo', 'giabao', ROLES.NV, 'Consultant', 3, 'bao.ngo@navigosgroup.com');
     NS('Hồ Văn Khải', 'vankhai', ROLES.NV, 'Consultant', 2, 'khai.ho@navigosgroup.com', 'Đã nghỉ việc');
-    NS('Lý Thanh Nga', 'thanhnga', ROLES.TN, 'Trưởng nhóm tư vấn (HCM)', 2, 'nga.ly@navigosgroup.com');
+    NS('Lý Thanh Nga', 'thanhnga', ROLES.QL, 'Quản lý tư vấn (HCM)', 2, 'nga.ly@navigosgroup.com');
 
     /* --- Kênh đăng tuyển --- */
     const K = (ten_kenh, ten_mien, tien_to, mo_ta, loai = 'ngoai') => ins('kenh_dang_tuyen', { ten_kenh, ten_mien, tien_to, mo_ta, trang_thai: 'Hoạt động', loai });
@@ -164,9 +167,10 @@ const Seed = (() => {
       // lên lịch phỏng vấn
       Auth.user = staff; at(day, 11);
       const future = target === 'pv_len'; const ivDay = new Date(); if (future) ivDay.setDate(ivDay.getDate() + int(0, 4)); else { ivDay.setTime(App.clock); ivDay.setDate(ivDay.getDate() + 1); }
+      while ([0, 6].includes(ivDay.getDay())) ivDay.setDate(ivDay.getDate() + 1); // lịch mẫu rơi vào ngày làm việc
       let ok = null;
       for (let k = 0; k < 8 && !ok?.ok; k++) { hourSlot = hourSlot >= 16 ? 8 : hourSlot + 1; const off = rand() < 0.5;
-        ok = Svc.saveInterview(hs.id, { ngay: toDateStr(ivDay), gio_bd: `${pad(hourSlot)}:00`, gio_kt: `${pad(hourSlot)}:45`, hinh_thuc: off ? 'Trực tiếp' : 'Trực tuyến', dia_diem_link: off ? `Văn phòng ${Q.khOfCt(ct).ten_cong_ty.replace(/^Công ty (CP|TNHH) /, '')} — ${Store.name('khu_vuc', ct.ma_khu_vuc)}` : `https://meet.google.com/${strip(uv.ho_ten).slice(0, 3)}-${int(1000, 9999)}-nvg`, ma_nhan_su: staff.id, nguoi_tham_gia: `${staff.ho_ten} (Navigos), ${Q.khOfCt(ct).nguoi_lien_he}` }); }
+        ok = Svc.saveInterview(hs.id, { ngay: toDateStr(ivDay), gio_bd: `${pad(hourSlot)}:00`, gio_kt: `${pad(hourSlot)}:45`, hinh_thuc: off ? 'Trực tiếp' : 'Trực tuyến', dia_diem_link: off ? `Văn phòng ${Q.khOfCt(ct).ten_cong_ty.replace(/^Công ty (CP|TNHH) /, '')} — ${Store.name('khu_vuc', ct.ma_khu_vuc)}` : `https://meet.google.com/${strip(uv.ho_ten).slice(0, 3)}-${int(1000, 9999)}-nvg`, ma_nhan_su: staff.id, nguoi_tham_gia: `${staff.ho_ten} (Navigos), ${Q.khOfCt(ct).nguoi_lien_he}`, xac_nhan_canh_bao: true }); }
       if (future) return hs;
       const lich = Q.lichOfHs(hs.id).at(-1); App.clock = new Date(lich.thoi_gian_ket_thuc).getTime() + 3600000; Auth.user = staff;
       const kq = { pv_khong: 'Không đạt', pv_them: 'Cần phỏng vấn thêm' }[target] || 'Đạt';

@@ -1,6 +1,7 @@
 -- =====================================================================
 --  Navigos Talent Suite — Lược đồ CSDL MySQL 8 (InnoDB, utf8mb4)
---  19 bảng nghiệp vụ theo ERD Hình 3.26 (Chương 3) + 1 bảng nhật ký đồng bộ.
+--  19 bảng nghiệp vụ theo ERD Hình 3.26 (Chương 3) + bảng quy tắc xếp lịch phỏng vấn (BR10-6)
+--  + 1 bảng nhật ký đồng bộ. Vai trò: Quản trị viên, Ban Giám đốc, Quản lý, Nhân viên.
 --  Đã chuẩn hóa theo góp ý GVHD:
 --   * "Dự án tuyển dụng" tách khỏi "Chi tiết dự án" (vị trí)
 --   * Bảng PHAN_CONG + KHU_VUC (nhân sự cùng khu vực đi phỏng vấn)
@@ -45,7 +46,7 @@ CREATE TABLE NHAN_SU (
   vai_tro             VARCHAR(20)  NOT NULL,
   trang_thai_lam_viec VARCHAR(20)  NOT NULL DEFAULT 'Đang làm việc',
   CONSTRAINT fk_ns_kv FOREIGN KEY (ma_khu_vuc) REFERENCES KHU_VUC(ma_khu_vuc),
-  CONSTRAINT ck_ns_vaitro CHECK (vai_tro IN ('Quản trị viên','Ban Giám đốc','Trưởng nhóm','Nhân viên')),
+  CONSTRAINT ck_ns_vaitro CHECK (vai_tro IN ('Quản trị viên','Ban Giám đốc','Quản lý','Nhân viên')),
   CONSTRAINT ck_ns_tt CHECK (trang_thai_lam_viec IN ('Đang làm việc','Đã nghỉ việc'))
 ) ENGINE=InnoDB;
 
@@ -214,7 +215,7 @@ CREATE TABLE DE_CU (
   phan_hoi_khach_hang VARCHAR(30),
   ngay_phan_hoi       DATETIME(3) NULL,
   ly_do_loai          VARCHAR(500),
-  ghi_chu             TEXT COMMENT 'Gồm lý do khi Trưởng nhóm yêu cầu chỉnh sửa',
+  ghi_chu             TEXT COMMENT 'Gồm lý do khi Quản lý yêu cầu chỉnh sửa',
   INDEX ix_dc_dot (ma_ho_so_ung_vien, dot_de_cu),  -- BR6-1 kiểm tra ở tầng ứng dụng (đề cử "Đã gỡ" được tạo lại)
   CONSTRAINT fk_dc_hs FOREIGN KEY (ma_ho_so_ung_vien) REFERENCES HO_SO_UNG_TUYEN(ma_ho_so_ung_vien),
   CONSTRAINT fk_dc_tao FOREIGN KEY (ma_nguoi_tao) REFERENCES NHAN_SU(ma_nhan_su),
@@ -276,6 +277,21 @@ CREATE TABLE KET_QUA_TUYEN_DUNG (
   CONSTRAINT fk_kqtd_hs FOREIGN KEY (ma_ho_so_ung_vien) REFERENCES HO_SO_UNG_TUYEN(ma_ho_so_ung_vien),
   CONSTRAINT ck_kqtd CHECK (ket_qua IN ('Chấp nhận offer','Từ chối offer')),
   CONSTRAINT ck_kqtd_ngay CHECK (ket_qua <> 'Chấp nhận offer' OR ngay_nhan_viec IS NOT NULL)
+) ENGINE=InnoDB;
+
+-- ---------- Quy tắc xếp lịch phỏng vấn (màn hình "Quy tắc xếp lịch phỏng vấn" — BR10-6) ----------
+CREATE TABLE QUY_TAC_XEP_LICH (
+  ma_quy_tac         INT AUTO_INCREMENT PRIMARY KEY,
+  khoang_nghi_phut   INT NOT NULL DEFAULT 30  COMMENT 'Khoảng nghỉ tối thiểu giữa hai buổi liên tiếp',
+  di_chuyen_phut     INT NOT NULL DEFAULT 90  COMMENT 'Thời gian di chuyển giữa hai khu vực khác nhau',
+  gio_bat_dau        CHAR(5) NOT NULL DEFAULT '08:00' COMMENT 'Giờ làm việc bắt đầu (HH:MM)',
+  gio_ket_thuc       CHAR(5) NOT NULL DEFAULT '18:00' COMMENT 'Giờ làm việc kết thúc (HH:MM)',
+  canh_bao_cuoi_tuan TINYINT(1) NOT NULL DEFAULT 1,
+  so_buoi_toi_da     INT NOT NULL DEFAULT 4   COMMENT 'Số buổi phỏng vấn tối đa / nhân viên / ngày',
+  ngay_cap_nhat      DATETIME(3) NULL,
+  ma_nguoi_cap_nhat  INT NULL,
+  CONSTRAINT fk_qt_ns FOREIGN KEY (ma_nguoi_cap_nhat) REFERENCES NHAN_SU(ma_nhan_su),
+  CONSTRAINT ck_qt CHECK (khoang_nghi_phut >= 0 AND di_chuyen_phut >= 0 AND so_buoi_toi_da > 0 AND gio_bat_dau < gio_ket_thuc)
 ) ENGINE=InnoDB;
 
 -- ---------- Nhật ký đồng bộ hồ sơ từ kênh đăng tuyển (phụ trợ) ----------

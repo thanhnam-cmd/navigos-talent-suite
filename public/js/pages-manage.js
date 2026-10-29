@@ -130,7 +130,7 @@ Pages.customerDetail = {
   },
 };
 
-/* ============ NHÂN SỰ (Trưởng nhóm / BGĐ xem khối lượng công việc) ============ */
+/* ============ NHÂN SỰ (Quản lý / BGĐ xem khối lượng công việc) ============ */
 Pages.staff = {
   render(v) {
     const ns = DB.nhan_su.filter((n) => n.vai_tro !== ROLES.ADMIN);
@@ -239,7 +239,7 @@ Pages.reports = {
       this._export = { headers: ['Giai đoạn', 'Số hồ sơ', 'Tỷ lệ so với giai đoạn trước %'], rows: steps.map((s, i) => [s.label, s.value, i ? pct(s.value, steps[i - 1].value) : 100]) };
     } else {
       const rows = Reports.staffPerf(f); if (!rows.length) return none();
-      b.innerHTML = `<div class="callout mb">${icon('info', 'sm')}<div>Đánh giá <b>hiệu suất lọc CV</b> của nhân viên: tỷ lệ đề cử được Trưởng nhóm duyệt, tỷ lệ khách hàng đồng ý phỏng vấn, số ứng viên nhận việc (BR12-4). Bấm “In danh sách” để in danh sách đề cử của từng nhân viên.</div></div>
+      b.innerHTML = `<div class="callout mb">${icon('info', 'sm')}<div>Đánh giá <b>hiệu suất lọc CV</b> của nhân viên: tỷ lệ đề cử được Quản lý duyệt, tỷ lệ khách hàng đồng ý phỏng vấn, số ứng viên nhận việc (BR12-4). Bấm “In danh sách” để in danh sách đề cử của từng nhân viên.</div></div>
         <div class="card mb"><div class="card-head"><h3>Số đề cử & nhận việc theo nhân viên</h3></div><div class="card-body">${Charts.bars({ data: rows.map((r) => ({ label: r.n.ho_ten.split(' ').slice(-2).join(' '), value: r.decu })), h: 190 })}</div></div>
         ${tbl(['Nhân viên', 'Vị trí phụ trách', 'Đề cử', 'Được duyệt', 'Bị yêu cầu sửa', 'Đã gửi KH', 'KH đồng ý PV', 'Lượt PV', 'Nhận việc', 'Tỷ lệ duyệt', 'Tỷ lệ KH chấp nhận', ''], rows.map((r) => [`<div class="person">${avatar(r.n.ho_ten, 'sm')}<span class="nm">${esc(r.n.ho_ten)}</span></div>`, r.duan, r.decu, r.approved, r.sua, r.sent, r.accepted, r.pv, `<b>${r.hired}</b>`, r.rateApprove + '%', r.rateClient + '%', `<button class="btn xs no-print" data-prn="${r.n.id}">${icon('printer', 'sm')} In danh sách</button>`]), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])}`;
       $$('[data-prn]', b).forEach((x) => (x.onclick = () => { const r = rows.find((y) => y.n.id === Number(x.dataset.prn)); if (!r.dcs.length) return toast('Nhân viên chưa có đề cử trong kỳ', 'warn'); Dlg.printRecs(r.dcs); }));
@@ -274,5 +274,38 @@ Pages.search = {
       <div class="card"><div class="card-head"><h3>${icon('briefcase')} Vị trí (${cts.length})</h3></div><div class="card-body">${cts.map((c) => `<a class="alert" href="#/du-an/${c.id}" style="color:inherit;text-decoration:none"><div><div class="tt">${esc(c.vi_tri)}</div><div class="ds">${Code.ct(c.id)} · ${esc(Q.khOfCt(c).ten_cong_ty)}</div></div></a>`).join('') || emptyState('Không có')}</div></div>
       <div class="card"><div class="card-head"><h3>${icon('users')} Ứng viên (${uvs.length})</h3></div><div class="card-body">${uvs.map((u) => `<a class="alert" href="#/ung-vien/${u.id}" style="color:inherit;text-decoration:none">${avatar(u.ho_ten, 'sm')}<div><div class="tt">${esc(u.ho_ten)}</div><div class="ds">${Code.uv(u.id)} · ${esc(u.trang_thai)}</div></div></a>`).join('') || emptyState('Không có')}</div></div>
       <div class="card"><div class="card-head"><h3>${icon('building')} Khách hàng (${khs.length})</h3></div><div class="card-body">${khs.map((x) => `<a class="alert" href="#/khach-hang/${x.id}" style="color:inherit;text-decoration:none"><div><div class="tt">${esc(x.ten_cong_ty)}</div><div class="ds">${esc(x.nguoi_lien_he)}</div></div></a>`).join('') || emptyState('Không có')}</div></div></div>`;
+  },
+};
+
+/* ============ QUY TẮC XẾP LỊCH PHỎNG VẤN (BR10-6) ============ */
+Pages.scheduleRules = {
+  render(v) {
+    const R = Q.rules(); const row = DB.quy_tac_xep_lich[0]; const by = row?.ma_nguoi_cap_nhat ? Q.ns(row.ma_nguoi_cap_nhat)?.ho_ten : null;
+    const upcoming = DB.lich_phong_van.filter((l) => l.trang_thai === ST.LICH.LEN && new Date(l.thoi_gian_bat_dau) >= startOfDay(now()));
+    const flagged = upcoming.map((l) => ({ l, w: Q.scheduleCheck({ nsId: l.ma_nhan_su, bd: new Date(l.thoi_gian_bat_dau), kt: new Date(l.thoi_gian_ket_thuc), hinh_thuc: l.hinh_thuc, ctId: Q.hs(l.ma_ho_so_ung_vien).ma_chi_tiet_du_an, exceptId: l.id }).warnings })).filter((x) => x.w.length);
+    v.innerHTML = `<div class="page-head"><div><h1>Quy tắc xếp lịch phỏng vấn</h1><p>Các mức thời gian dùng để <b>cảnh báo</b> khi lên lịch (BR10-6). Trùng lịch của nhân viên phỏng vấn luôn là <b>lỗi</b> và không cho lưu (BR10-2).</p></div></div>
+      <div class="grid g-main">
+        <div class="card card-pad"><form class="form-grid" id="rf" novalidate>
+          ${Form.field('Khoảng nghỉ tối thiểu giữa hai buổi (phút)', 'khoang_nghi_phut', { type: 'number', req: true, value: R.khoang_nghi_phut, attrs: 'min="0" max="240"', hint: 'Hai buổi liên tiếp cùng nhân viên cách nhau ít hơn mức này → cảnh báo.' })}
+          ${Form.field('Thời gian di chuyển giữa hai khu vực (phút)', 'di_chuyen_phut', { type: 'number', req: true, value: R.di_chuyen_phut, attrs: 'min="0" max="720"', hint: 'Áp dụng khi hai buổi trực tiếp ở hai khu vực khác nhau.' })}
+          ${Form.field('Giờ làm việc bắt đầu', 'gio_bat_dau', { type: 'time', req: true, value: R.gio_bat_dau })}
+          ${Form.field('Giờ làm việc kết thúc', 'gio_ket_thuc', { type: 'time', req: true, value: R.gio_ket_thuc })}
+          ${Form.field('Số buổi phỏng vấn tối đa / nhân viên / ngày', 'so_buoi_toi_da', { type: 'number', req: true, value: R.so_buoi_toi_da, attrs: 'min="1" max="20"' })}
+          <div class="field" style="display:flex;align-items:flex-end"><label class="check" style="text-transform:none;font-size:14px;color:var(--text)"><input type="checkbox" name="canh_bao_cuoi_tuan" ${Number(R.canh_bao_cuoi_tuan) ? 'checked' : ''}> Cảnh báo khi lịch rơi vào thứ Bảy / Chủ nhật</label></div>
+          <div class="full row between"><span class="muted small">${row?.ngay_cap_nhat ? `Cập nhật ${fmtDT(row.ngay_cap_nhat)}${by ? ' bởi ' + esc(by) : ''}` : 'Đang dùng giá trị mặc định'}</span><button class="btn primary" type="submit">${icon('check', 'sm')} Lưu quy tắc</button></div>
+        </form></div>
+        <div class="card card-pad"><h3 style="font-size:15px" class="mb">Cách hệ thống xử lý khi lên lịch</h3>
+          <div class="timeline">
+            <div class="tl-item"><b>1. Nhập lịch khách hàng chốt</b><div class="note">Ngày, giờ, hình thức, địa điểm — hệ thống không tự đổi giờ.</div></div>
+            <div class="tl-item violet"><b>2. Phân công nhân viên phỏng vấn</b><div class="note">Mặc định người phụ trách dự án (có thể chọn người khác).</div></div>
+            <div class="tl-item red"><b>3. Trùng lịch → không cho lưu</b><div class="note">Gợi ý nhân viên đang rảnh trong khung giờ đó.</div></div>
+            <div class="tl-item amber"><b>4. Cảnh báo → xác nhận để lưu</b><div class="note">Khoảng nghỉ, di chuyển, ngoài giờ, cuối tuần, số buổi/ngày.</div></div>
+            <div class="tl-item green"><b>5. Lưu lịch, hồ sơ → “Phỏng vấn”</b></div>
+          </div></div>
+      </div>
+      <div class="card mt"><div class="card-head"><div><h3>Lịch sắp tới đang vi phạm quy tắc hiện hành</h3><p>Rà soát sau khi thay đổi quy tắc — ${flagged.length}/${upcoming.length} buổi có cảnh báo</p></div></div>
+        <div class="card-body">${flagged.length ? flagged.map(({ l, w }) => `<div class="alert"><span class="ico tone-amber">${icon('alert', 'sm')}</span><div><div class="tt">${fmtDT(l.thoi_gian_bat_dau)} · ${esc(Q.ns(l.ma_nhan_su).ho_ten)} · ${esc(Q.uv(Q.hs(l.ma_ho_so_ung_vien).ma_ung_vien).ho_ten)}</div>${w.map((x) => `<div class="ds">• <b>${esc(x.loai)}:</b> ${esc(x.text)}</div>`).join('')}</div></div>`).join('') : emptyState('Không có lịch sắp tới nào vi phạm quy tắc', 'checkCircle')}</div></div>`;
+    const f = $('#rf', v);
+    f.onsubmit = (e) => { e.preventDefault(); const r = Svc.saveScheduleRules(Form.values(f)); if (!r.ok) { if (r.errors) Form.showErrors(f, r.errors); else toast(r.error, 'err'); return; } toast('Đã lưu quy tắc xếp lịch phỏng vấn'); UI.refresh(); };
   },
 };

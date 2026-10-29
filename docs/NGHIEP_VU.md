@@ -29,11 +29,12 @@ Nhân viên chỉ **đọc CV, chuẩn hóa và gắn thẻ** (lĩnh vực, chuy
 ## 3. Quy trình nghiệp vụ tuyển dụng (Notes §2)
 
 ```
-Tiếp nhận yêu cầu ─► Vị trí "Mới tiếp nhận" ─► Trưởng nhóm phân công ─► "Đang thực hiện"
+Tiếp nhận yêu cầu ─► Vị trí "Mới tiếp nhận" ─► Quản lý phân công ─► "Đang thực hiện"
    ─► Lọc nâng cao (chỉ UV Hoạt động) ─► Tạo đề cử "Chờ duyệt"
-   ─► Trưởng nhóm DUYỆT  ── hoặc ── YÊU CẦU CHỈNH SỬA (bắt buộc lý do → NV sửa → gửi duyệt lại)
+   ─► Quản lý DUYỆT  ── hoặc ── YÊU CẦU CHỈNH SỬA (bắt buộc lý do → NV sửa → gửi duyệt lại)
    ─► Gửi khách hàng ─► Phản hồi: Đồng ý PV | Từ chối (lý do) | Cần đợt tiếp theo
-   ─► Lịch phỏng vấn (kiểm tra trùng lịch PIC) ─► Kết quả: Đạt | Không đạt | Cần PV thêm (+ feedback KH)
+   ─► Lịch phỏng vấn do KH chốt: NV phỏng vấn mặc định = người phụ trách dự án; trùng lịch → chọn NV khác (giữ giờ);
+      cảnh báo (nghỉ ngắn, di chuyển, ngoài giờ, cuối tuần, số buổi/ngày) → xác nhận ─► Kết quả: Đạt | Không đạt | Cần PV thêm
    ─► Kết quả tuyển dụng do KH báo: Chấp nhận offer (ngày nhận việc + email xác nhận) | Từ chối offer
    ─► Đủ chỉ tiêu ⇒ vị trí tự chuyển "Hoàn thành"; chưa đủ ⇒ tiếp tục tìm kiếm bổ sung
 ```
@@ -74,14 +75,14 @@ Bảng `LICH_SU_TRANG_THAI` **chỉ 4 trường**: `ma_ho_so_ung_vien`, `thoi_di
 5. **Tỷ lệ chuyển đổi hồ sơ** — phễu Mới apply → Đề cử → Phỏng vấn → Thử việc (BR12-2), theo từng vị trí.
 6. **Hiệu suất đề cử nhân viên** — số đề cử, tỷ lệ được duyệt, bị yêu cầu sửa, KH đồng ý PV, nhận việc; **In danh sách đề cử** của từng nhân viên để đánh giá hiệu suất lọc CV.
 
-Bộ lọc: thời gian, khách hàng, vị trí, nhân viên. Xuất **Excel (.xls)** và **PDF** (in). Chỉ Ban Giám đốc / Trưởng nhóm xem được.
+Bộ lọc: thời gian, khách hàng, vị trí, nhân viên. Xuất **Excel (.xls)** và **PDF** (in). Chỉ Ban Giám đốc / Quản lý xem được.
 
 ## 7. Phân quyền (UC_01, UC_02, BR4-6)
 
 | Vai trò | Quyền chính | Phạm vi dữ liệu |
 |---|---|---|
 | Quản trị viên | Tài khoản, phân quyền, đặt lại mật khẩu, danh mục | Không xem nghiệp vụ tuyển dụng |
-| Ban Giám đốc / Trưởng nhóm | Phân công, duyệt đề cử, báo cáo + toàn bộ thao tác nghiệp vụ | Toàn bộ dự án |
+| Ban Giám đốc / Quản lý | Phân công, duyệt đề cử, báo cáo + toàn bộ thao tác nghiệp vụ | Toàn bộ dự án |
 | Nhân viên | Khách hàng, dự án, chuẩn hóa hồ sơ, đề cử, phỏng vấn, kết quả | Chỉ vị trí **được phân công hoặc tự tạo** |
 
 - Mật khẩu lưu trong MySQL dạng **SHA-256**, không bao giờ gửi xuống trình duyệt; phiên đăng nhập bằng cookie HttpOnly. Đăng nhập sai không nêu trường sai. Tài khoản "Đã nghỉ việc" không đăng nhập được, không bị xóa (BR2-4).
@@ -91,3 +92,8 @@ Bộ lọc: thời gian, khách hàng, vị trí, nhân viên. Xuất **Excel (.
 - `CHI_TIET_DU_AN.ma_nguoi_tao` — cần để thực hiện BR4-6 ("nhân viên xem dự án do mình tạo").
 - Ràng buộc UNIQUE `(ma_ung_vien, ma_chi_tiet_du_an)` trên `HO_SO_UNG_TUYEN` và `(ma_ho_so_ung_vien, dot_de_cu)` trên `DE_CU` để bảo đảm BR6-1, BR6-2 ở tầng CSDL.
 - Trường `TIN_DANG` có UNIQUE `(ma_kenh, ma_tin_kenh)` để đối chiếu mã tin không nhập nhằng.
+
+
+## 9. Cập nhật theo Chương 3 bản (2)
+
+Xem phân tích đầy đủ các luồng, thay đổi và điểm cần sửa trong tài liệu: [PHAN_TICH_CHUONG3.md](PHAN_TICH_CHUONG3.md).

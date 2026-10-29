@@ -30,6 +30,7 @@ const serial = (fn) => { const p = chain.then(fn, fn); chain = p.catch(() => {})
 
 /* ---------- Phân quyền gọi nghiệp vụ ---------- */
 const ADMIN_FNS = new Set(['saveAccount', 'resetPassword', 'setRole', 'deactivateAccount', 'addCatalog', 'toggleChannel']);
+const ADMIN_OR_LEAD_FNS = new Set(['saveScheduleRules']); // BR10-6
 const BLOCKED = new Set(['_withdrawActive', 'ingest', 'filterCandidates', 'suggestStaff', 'genPassword']);
 
 /* ---------- Tiện ích HTTP ---------- */
@@ -113,7 +114,8 @@ async function api(req, res, url) {
     return serial(async () => {
       const u = E.Store.get('nhan_su', sessions.get(s.sid)?.uid); E.Auth.user = u;
       try {
-        if (ADMIN_FNS.has(fn) ? !E.Auth.isAdmin() : !E.Auth.canWork()) return send(res, 403, { ok: false, error: 'Chức năng không thuộc phạm vi vai trò của bạn.' });
+        const allowed = ADMIN_FNS.has(fn) ? E.Auth.isAdmin() : ADMIN_OR_LEAD_FNS.has(fn) ? E.Auth.isAdmin() || E.Auth.isLead() : E.Auth.canWork();
+        if (!allowed) return send(res, 403, { ok: false, error: 'Chức năng không thuộc phạm vi vai trò của bạn.' });
         const result = E.Svc[fn](...args);
         await persistOrRollback();
         send(res, 200, payload({ result }, E.Store.get('nhan_su', u.id) || u));

@@ -19,7 +19,7 @@ npm start
 `npm run setup` (chỉ cần lần đầu) sẽ: tạo `.env` với mật khẩu CSDL ngẫu nhiên → khởi tạo một **instance MySQL 8 riêng của dự án** (dữ liệu trong `database/mysql-data`, cổng **3307**, dùng bản MySQL Server 8.0 đã cài trên máy, không đụng tới dịch vụ MySQL80 cổng 3306) → tạo CSDL `navigos_talent`, tài khoản ứng dụng `navigos_app` (chỉ quyền SELECT/INSERT/UPDATE/DELETE) và nạp `database/schema.sql`.
 Lần khởi động đầu, máy chủ tự sinh dữ liệu mẫu bằng chính quy trình nghiệp vụ và ghi vào MySQL.
 
-**Tài khoản demo** (mật khẩu `123456`): `admin` · `giamdoc` · `truongnhom` · `nhanvien` · `thuha` · `hoangphuc` · `thanhtam` · `giabao`.
+**Tài khoản demo** (mật khẩu `123456`): `admin` · `giamdoc` · `quanly` · `nhanvien` · `thuha` · `hoangphuc` · `thanhtam` · `giabao`.
 
 ### Dùng máy chủ MySQL có sẵn thay cho instance riêng
 

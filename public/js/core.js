@@ -133,7 +133,7 @@ const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hi
 const DB_KEY = 'navigos_talent_db_v3';
 const TABLES = ['khu_vuc', 'linh_vuc', 'cap_bac', 'chuyen_mon', 'nhan_su', 'khach_hang', 'du_an_tuyen_dung', 'chi_tiet_du_an',
   'kenh_dang_tuyen', 'tin_dang', 'phan_cong', 'ung_vien', 'ho_so_ung_tuyen', 'lich_su_trang_thai', 'de_cu', 'lich_phong_van',
-  'ket_qua_phong_van', 'feedback', 'ket_qua_tuyen_dung'];
+  'ket_qua_phong_van', 'feedback', 'ket_qua_tuyen_dung', 'quy_tac_xep_lich'];
 
 const Store = {
   db: null,
@@ -160,7 +160,7 @@ const Code = {
 };
 
 /* ---------- Xác thực & phân quyền (UC_01, UC_02) ---------- */
-const ROLES = { ADMIN: 'Quản trị viên', BGD: 'Ban Giám đốc', TN: 'Trưởng nhóm', NV: 'Nhân viên' };
+const ROLES = { ADMIN: 'Quản trị viên', BGD: 'Ban Giám đốc', QL: 'Quản lý', NV: 'Nhân viên' };
 const Auth = {
   user: null,
   restore() {
@@ -177,7 +177,7 @@ const Auth = {
   logout() { this.user = null; try { sessionStorage.removeItem('navigos_uid'); } catch (e) { /* bỏ qua */ } location.hash = '#/login'; },
   role() { return this.user?.vai_tro; },
   isAdmin() { return this.role() === ROLES.ADMIN; },
-  isLead() { return [ROLES.BGD, ROLES.TN].includes(this.role()); },
+  isLead() { return [ROLES.BGD, ROLES.QL].includes(this.role()); },
   isStaff() { return this.role() === ROLES.NV; },
   canWork() { return this.isLead() || this.isStaff(); }, // nghiệp vụ tuyển dụng
 };
@@ -261,8 +261,8 @@ const UI = {
       nav += item('#/ket-qua', 'checkCircle', 'Kết quả tuyển dụng');
       nav += item('#/khach-hang', 'building', 'Khách hàng');
     }
-    if (Auth.isLead()) { nav += `<div class="nav-label">Quản lý</div>` + item('#/bao-cao', 'chart', 'Báo cáo - Thống kê') + item('#/nhan-su', 'idcard', 'Nhân sự'); }
-    if (Auth.isAdmin()) { nav += `<div class="nav-label">Quản trị hệ thống</div>` + item('#/tai-khoan', 'shield', 'Tài khoản & phân quyền') + item('#/danh-muc', 'layers', 'Danh mục dùng chung'); }
+    if (Auth.isLead()) { nav += `<div class="nav-label">Quản lý</div>` + item('#/bao-cao', 'chart', 'Báo cáo - Thống kê') + item('#/nhan-su', 'idcard', 'Nhân sự') + item('#/quy-tac-lich', 'clock', 'Quy tắc xếp lịch PV'); }
+    if (Auth.isAdmin()) { nav += `<div class="nav-label">Quản trị hệ thống</div>` + item('#/tai-khoan', 'shield', 'Tài khoản & phân quyền') + item('#/danh-muc', 'layers', 'Danh mục dùng chung') + item('#/quy-tac-lich', 'clock', 'Quy tắc xếp lịch PV'); }
     $('#sidebar').innerHTML = `<a class="brand" href="#/"><img src="assets/logo.png" alt="Navigos Group"></a>
       <nav class="nav">${nav}</nav>
       <div class="sidebar-foot"><a href="#/cai-dat">${icon('settings')}<span>Cài đặt</span></a><a href="#" class="danger" id="logoutBtn">${icon('logout')}<span>Đăng xuất</span></a></div>`;

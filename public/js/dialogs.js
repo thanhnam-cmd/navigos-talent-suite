@@ -36,7 +36,7 @@ const Dlg = {
         ${Form.field('Cấp bậc', 'ma_cap_bac', { req: true, value: c.ma_cap_bac, opts: Form.opts('cap_bac', { blank: '— Chọn —' }) })}
         ${Form.field('Chuyên môn', 'ma_chuyen_mon', { req: true, value: c.ma_chuyen_mon, opts: Form.opts('chuyen_mon', { blank: '— Chọn —' }) })}
         ${Form.field('Khu vực làm việc', 'ma_khu_vuc', { req: true, value: c.ma_khu_vuc, opts: kvOpts(), hint: 'Dùng để gợi ý nhân viên cùng khu vực khi phân công.' })}
-        ${id ? '' : `<div class="full callout">${icon('info', 'sm')}<div>Vị trí mới được lưu ở trạng thái <b>Mới tiếp nhận</b>; Trưởng nhóm phân công nhân viên phụ trách để chuyển sang <b>Đang thực hiện</b>.</div></div>`}</form>` });
+        ${id ? '' : `<div class="full callout">${icon('info', 'sm')}<div>Vị trí mới được lưu ở trạng thái <b>Mới tiếp nhận</b>; Quản lý phân công nhân viên phụ trách để chuyển sang <b>Đang thực hiện</b>.</div></div>`}</form>` });
     m.$('#qNewDa') && (m.$('#qNewDa').onclick = () => { m.close(); Dlg.project(); });
     submitForm(m, (v) => { const r = Svc.savePosition(v, id); if (r.ok) doneThen(m, id ? 'Đã cập nhật vị trí' : `Đã lưu vị trí ${Code.ct(r.row.id)} — trạng thái Mới tiếp nhận`, () => (id ? UI.refresh() : Router.go('#/du-an/' + r.row.id)))(r); return r; });
   },
@@ -96,22 +96,70 @@ const Dlg = {
     submitForm(m, (v) => { const r = Svc.clientFeedback(dcId, v.type, v.ly_do_loai); if (r.ok) doneThen(m, 'Đã lưu phản hồi khách hàng', then || (() => { UI.refresh(); if (v.type === 'Đồng ý phỏng vấn') Dlg.interview(Store.get('de_cu', dcId).ma_ho_so_ung_vien); }))(r); return r; });
   },
   /* ----- Phỏng vấn (UC_10, UC_11) ----- */
+  /** UC_10 — Lịch do khách hàng chốt; NV phỏng vấn mặc định là người phụ trách dự án; trùng lịch → chọn NV khác */
   interview(hsId, lichId = null, then) {
     const hs = Q.hs(hsId); const uv = Q.uv(hs.ma_ung_vien); const ct = Q.ct(hs.ma_chi_tiet_du_an); const l = lichId ? Store.get('lich_phong_van', lichId) : null;
-    const staff = [...Q.assignees(ct.id), ...DB.nhan_su.filter((n) => n.trang_thai_lam_viec === 'Đang làm việc' && n.vai_tro === ROLES.NV && !Q.assignees(ct.id).some((a) => a.id === n.id))];
-    const def = l ? new Date(l.thoi_gian_bat_dau) : (() => { const d = new Date(now()); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; })();
+    const asg = Q.assignees(ct.id);
+    if (!asg.length) return toast('Dự án chưa có nhân viên phụ trách — cần Quản lý phân công trước khi lên lịch phỏng vấn.', 'warn');
+    const defNs = l?.ma_nhan_su || Q.defaultInterviewer(ct).id;
+    const others = DB.nhan_su.filter((n) => n.trang_thai_lam_viec === 'Đang làm việc' && n.vai_tro === ROLES.NV && !asg.some((a) => a.id === n.id));
+    const optLabel = (n, tag) => `${n.ho_ten} — ${Store.name('khu_vuc', n.ma_khu_vuc)}${tag}`;
+    const staffOpts = [...asg.map((n) => [n.id, optLabel(n, ' · phụ trách dự án')]), ...others.map((n) => [n.id, optLabel(n, n.ma_khu_vuc === ct.ma_khu_vuc ? ' · cùng khu vực' : '')])];
+    const def = l ? new Date(l.thoi_gian_bat_dau) : (() => { const d = new Date(now()); d.setDate(d.getDate() + 1); if ([0, 6].includes(d.getDay())) d.setDate(d.getDate() + (d.getDay() === 6 ? 2 : 1)); d.setHours(9, 0, 0, 0); return d; })();
     const defEnd = l ? new Date(l.thoi_gian_ket_thuc) : new Date(def.getTime() + 3600000);
-    const m = modal({ title: l ? 'Cập nhật lịch phỏng vấn' : `Lên lịch phỏng vấn — ${esc(uv.ho_ten)}`, foot: foot(l ? 'Lưu thay đổi' : 'Lưu lịch'),
-      body: `<p class="muted small" style="margin-top:0">${esc(ct.vi_tri)} · ${esc(Q.khOfCt(ct).ten_cong_ty)} — buổi phỏng vấn do nhân viên tổ chức cùng khách hàng; hệ thống lưu lịch & kiểm tra trùng lịch (BR10-2).</p>
+    const R = Q.rules();
+    const m = modal({ size: 'lg', title: l ? 'Cập nhật lịch phỏng vấn' : `Lên lịch phỏng vấn — ${esc(uv.ho_ten)}`, foot: foot(l ? 'Lưu thay đổi' : 'Lưu lịch'),
+      body: `<div class="callout mb">${icon('info', 'sm')}<div><b>${esc(ct.vi_tri)}</b> · ${esc(Q.khOfCt(ct).ten_cong_ty)} · ${esc(Store.name('khu_vuc', ct.ma_khu_vuc))}<br>
+          Nhập đúng lịch <b>khách hàng đã chốt</b> — hệ thống không tự đổi giờ. Nhân viên phỏng vấn mặc định là <b>người phụ trách dự án</b>; nếu bị trùng lịch, hãy chọn nhân viên khác (BR10-5).</div></div>
         <form class="form-grid" novalidate>
-        ${Form.field('Ngày phỏng vấn', 'ngay', { type: 'date', req: true, value: toDateStr(def) })}
-        ${Form.field('Nhân viên phụ trách (PIC)', 'ma_nhan_su', { req: true, value: l?.ma_nhan_su || Auth.user.id, opts: staff.map((n) => [n.id, `${n.ho_ten} — ${Store.name('khu_vuc', n.ma_khu_vuc)}${n.ma_khu_vuc === ct.ma_khu_vuc ? ' ✓ cùng khu vực' : ''}`]) })}
+        ${Form.field('Ngày phỏng vấn (khách hàng chốt)', 'ngay', { type: 'date', req: true, value: toDateStr(def) })}
+        ${Form.field('Nhân viên phỏng vấn', 'ma_nhan_su', { req: true, value: defNs, opts: staffOpts, hint: 'Có thể chủ động chọn nhân viên khác đang làm việc (3a).' })}
         ${Form.field('Giờ bắt đầu', 'gio_bd', { type: 'time', req: true, value: fmtTime(def) })}
         ${Form.field('Giờ kết thúc', 'gio_kt', { type: 'time', req: true, value: fmtTime(defEnd) })}
         ${Form.field('Hình thức', 'hinh_thuc', { req: true, value: l?.hinh_thuc || 'Trực tuyến', opts: ['Trực tuyến', 'Trực tiếp'] })}
-        ${Form.field('Đường dẫn / Địa điểm', 'dia_diem_link', { req: true, value: l?.dia_diem_link || '', ph: 'https://meet.google.com/… hoặc địa chỉ văn phòng' })}
-        ${Form.field('Người tham gia', 'nguoi_tham_gia', { value: l?.nguoi_tham_gia || `${Auth.user.ho_ten} (Navigos), ${Q.khOfCt(ct).nguoi_lien_he}`, full: true })}</form>` });
-    submitForm(m, (v) => { const r = Svc.saveInterview(hs.id, v, lichId); if (r.ok) doneThen(m, l ? 'Đã cập nhật lịch' : 'Đã lưu lịch — hồ sơ chuyển “Phỏng vấn”', then)(r); return r; });
+        ${Form.field('Đường dẫn / Địa điểm', 'dia_diem_link', { req: true, value: l?.dia_diem_link || '', ph: 'https://meet.google.com/… hoặc địa chỉ văn phòng khách hàng' })}
+        ${Form.field('Người tham gia', 'nguoi_tham_gia', { value: l?.nguoi_tham_gia || `${Q.ns(defNs).ho_ten} (Navigos), ${Q.khOfCt(ct).nguoi_lien_he}`, full: true })}
+        <div class="full" id="ivCheck"></div></form>
+        <p class="muted small" style="margin:10px 0 0">Quy tắc đang áp dụng: nghỉ tối thiểu ${R.khoang_nghi_phut}′ giữa hai buổi · di chuyển khác khu vực ${R.di_chuyen_phut}′ · giờ làm việc ${R.gio_bat_dau}–${R.gio_ket_thuc}${Number(R.canh_bao_cuoi_tuan) ? ' · cảnh báo cuối tuần' : ''} · tối đa ${R.so_buoi_toi_da} buổi/ngày.</p>` });
+    const f = m.$('form');
+    const times = () => { const v = Form.values(f); const bd = v.ngay && v.gio_bd ? new Date(`${v.ngay}T${v.gio_bd}`) : null; const kt = v.ngay && v.gio_kt ? new Date(`${v.ngay}T${v.gio_kt}`) : null; return { v, bd, kt }; };
+    // Bước 2: kiểm tra trùng lịch & cảnh báo ngay khi nhập (cùng quy tắc với máy chủ)
+    const check = () => {
+      const { v, bd, kt } = times(); const box = m.$('#ivCheck');
+      if (!bd || !kt || isNaN(bd) || isNaN(kt) || kt <= bd || !v.ma_nhan_su) { box.innerHTML = ''; return; }
+      const chk = Q.scheduleCheck({ nsId: v.ma_nhan_su, bd, kt, hinh_thuc: v.hinh_thuc, ctId: ct.id, exceptId: lichId });
+      if (chk.conflicts.length) {
+        const free = Q.freeInterviewers({ bd, kt, hinh_thuc: v.hinh_thuc, ctId: ct.id, exceptId: lichId }).slice(0, 6);
+        box.innerHTML = `<div class="callout red">${icon('alert', 'sm')}<div><b>Trùng lịch — không thể lưu.</b> ${esc(Q.ns(v.ma_nhan_su).ho_ten)} đã có: ${chk.conflicts.map((c) => `${fmtTime(c.thoi_gian_bat_dau)}–${fmtTime(c.thoi_gian_ket_thuc)} (${esc(Q.uv(Q.hs(c.ma_ho_so_ung_vien).ma_ung_vien).ho_ten)})`).join(', ')}.
+          <div class="mt-sm">Chọn nhân viên khác đang rảnh trong khung giờ này:</div>
+          <div class="chip-group mt-sm">${free.map((x) => `<button type="button" class="chip" data-ns="${x.id}">${esc(x.ho_ten)} · ${esc(x.khu_vuc)}${x.canh_bao ? ` · ${x.canh_bao} cảnh báo` : ''}</button>`).join('') || '<span class="small">Không còn nhân viên nào rảnh — hãy trao đổi lại với khách hàng.</span>'}</div></div></div>`;
+        m.$$('[data-ns]').forEach((b) => (b.onclick = () => { f.ma_nhan_su.value = b.dataset.ns; f.ma_nhan_su.dispatchEvent(new Event('change')); }));
+      } else if (chk.warnings.length) {
+        box.innerHTML = `<div class="callout amber">${icon('alert', 'sm')}<div><b>Cảnh báo xếp lịch (${chk.warnings.length})</b> — vẫn lưu được sau khi xác nhận (BR10-6):<ul style="margin:6px 0 0;padding-left:18px">${chk.warnings.map((w) => `<li><b>${esc(w.loai)}:</b> ${esc(w.text)}</li>`).join('')}</ul></div></div>`;
+      } else box.innerHTML = `<div class="callout green">${icon('checkCircle', 'sm')}<div>Không trùng lịch, không có cảnh báo — sẵn sàng lưu.</div></div>`;
+    };
+    let prevNs = Number(defNs);
+    f.ma_nhan_su.addEventListener('change', () => { // đổi nhân viên phỏng vấn → cập nhật danh sách người tham gia
+      const a = Q.ns(prevNs)?.ho_ten, b = Q.ns(f.ma_nhan_su.value)?.ho_ten; if (a && b && f.nguoi_tham_gia.value.includes(a)) f.nguoi_tham_gia.value = f.nguoi_tham_gia.value.replace(a, b); prevNs = Number(f.ma_nhan_su.value);
+    });
+    ['ngay', 'gio_bd', 'gio_kt', 'hinh_thuc', 'ma_nhan_su'].forEach((k) => f[k].addEventListener('change', check));
+    ['gio_bd', 'gio_kt'].forEach((k) => f[k].addEventListener('input', check));
+    check();
+    const done = doneThen(m, l ? 'Đã cập nhật lịch phỏng vấn' : 'Đã lưu lịch — hồ sơ chuyển “Phỏng vấn”', then);
+    submitForm(m, () => {
+      const { v, bd, kt } = times();
+      const payload = { ...v, bd_iso: bd && !isNaN(bd) ? bd.toISOString() : '', kt_iso: kt && !isNaN(kt) ? kt.toISOString() : '' };
+      const r = Svc.saveInterview(hs.id, payload, lichId);
+      if (r.ok) { done(r); return r; }
+      if (r.conflict) { check(); return r; } // bước 3: báo trùng lịch, đề nghị chọn nhân viên khác
+      if (r.needConfirm) { // 4c: cảnh báo → người dùng xác nhận để lưu
+        confirmBox({ title: 'Xác nhận lưu lịch có cảnh báo', okText: 'Xác nhận & lưu',
+          message: `<ul style="margin:0;padding-left:18px">${r.warnings.map((w) => `<li><b>${esc(w.loai)}:</b> ${esc(w.text)}</li>`).join('')}</ul><p class="small muted">Lịch do khách hàng quyết định nên hệ thống không đổi giờ. Bạn có thể quay lại để chọn nhân viên khác.</p>`,
+          onOk: () => { const r2 = Svc.saveInterview(hs.id, { ...payload, xac_nhan_canh_bao: true }, lichId); if (!r2.ok) { toast(r2.error || 'Không lưu được lịch.', 'err'); return; } done(r2); } });
+        return { ok: true };
+      }
+      return r;
+    });
   },
   interviewResult(lichId, then) {
     const l = Store.get('lich_phong_van', lichId); const uv = Q.uv(Q.hs(l.ma_ho_so_ung_vien).ma_ung_vien);

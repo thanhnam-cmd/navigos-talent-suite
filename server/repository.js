@@ -29,6 +29,7 @@ const MAP = {
   ket_qua_phong_van: { sql: 'KET_QUA_PHONG_VAN', pk: 'ma_ket_qua' },
   feedback: { sql: 'FEEDBACK', pk: 'ma_feedback' },
   ket_qua_tuyen_dung: { sql: 'KET_QUA_TUYEN_DUNG', pk: 'ma_ket_qua_td' },
+  quy_tac_xep_lich: { sql: 'QUY_TAC_XEP_LICH', pk: 'ma_quy_tac' },
 };
 const ORDER = Object.keys(MAP); // thứ tự cha → con (đảm bảo khóa ngoại khi INSERT)
 const LOG_COLS = ['thoi_diem', 'nguoi', 'kenh', 'url', 'tong', 'moi', 'trung', 'gan', 'cho_gan', 'bo_qua'];
@@ -54,7 +55,36 @@ class Repository {
         await c.query(fs.readFileSync(path.join(this.cfg.ROOT, 'database', 'schema.sql'), 'utf8'));
         console.log('• Đã tạo bảng từ database/schema.sql');
       }
+      await this.migrate(c);
     } finally { await c.end(); }
+  }
+
+  /** Nâng cấp CSDL đang có dữ liệu theo Chương 3 bản cập nhật (idempotent — chạy nhiều lần vẫn an toàn) */
+  async migrate(c) {
+    const db = this.cfg.DB_NAME;
+    // 1) Vai trò "Trưởng nhóm" → "Quản lý"
+    const [ck] = await c.query("SELECT CHECK_CLAUSE cc FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ? AND CONSTRAINT_NAME = 'ck_ns_vaitro'", [db]);
+    const [old] = await c.query("SELECT COUNT(*) n FROM NHAN_SU WHERE vai_tro = 'Trưởng nhóm'");
+    // MySQL lưu CHECK_CLAUSE với tiếng Việt bị mã hóa kép → nhận biết bằng mẫu ASCII: chỉ vai trò cũ "Trưởng nhóm" bắt đầu bằng 'Tr
+    const oldClause = ck[0] && /'Tr/.test(String(ck[0].cc));
+    if (oldClause || old[0].n) {
+      if (ck[0]) await c.query('ALTER TABLE NHAN_SU DROP CHECK ck_ns_vaitro');
+      await c.query("UPDATE NHAN_SU SET vai_tro = 'Quản lý' WHERE vai_tro = 'Trưởng nhóm'");
+      await c.query("UPDATE NHAN_SU SET chuc_vu = REPLACE(chuc_vu, 'Trưởng nhóm tư vấn', 'Quản lý tư vấn')");
+      const [[q]] = await c.query("SELECT COUNT(*) n FROM NHAN_SU WHERE ten_dang_nhap = 'quanly'");
+      if (!q.n) await c.query("UPDATE NHAN_SU SET ten_dang_nhap = 'quanly' WHERE ten_dang_nhap = 'truongnhom'");
+      await c.query("UPDATE LICH_SU_TRANG_THAI SET ghi_chu = REPLACE(ghi_chu, 'Trưởng nhóm', 'Quản lý') WHERE ghi_chu LIKE '%Trưởng nhóm%'");
+      await c.query("ALTER TABLE NHAN_SU ADD CONSTRAINT ck_ns_vaitro CHECK (vai_tro IN ('Quản trị viên','Ban Giám đốc','Quản lý','Nhân viên'))");
+      console.log('• Migration: vai trò "Trưởng nhóm" → "Quản lý"');
+    }
+    // 2) Bảng quy tắc xếp lịch phỏng vấn (BR10-6)
+    const [t] = await c.query("SELECT COUNT(*) n FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND UPPER(TABLE_NAME) = 'QUY_TAC_XEP_LICH'", [db]);
+    if (!t[0].n) {
+      const ddl = fs.readFileSync(path.join(this.cfg.ROOT, 'database', 'schema.sql'), 'utf8').match(/CREATE TABLE QUY_TAC_XEP_LICH[\s\S]*?ENGINE=InnoDB;/)[0];
+      await c.query(ddl);
+      await c.query('INSERT INTO QUY_TAC_XEP_LICH (ngay_cap_nhat) VALUES (UTC_TIMESTAMP(3))');
+      console.log('• Migration: tạo bảng QUY_TAC_XEP_LICH (BR10-6)');
+    }
   }
 
   async connect() {

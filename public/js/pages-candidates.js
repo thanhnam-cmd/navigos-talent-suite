@@ -89,18 +89,18 @@ Pages.candidates = {
   createDialog(ct) {
     if (!this.picked.size) return toast('Chưa tick chọn ứng viên nào (5a).', 'warn');
     const ids = [...this.picked]; const nextDot = 'Đợt ' + (new Set(DB.de_cu.filter((d) => Q.hs(d.ma_ho_so_ung_vien).ma_chi_tiet_du_an === ct.id).map((d) => d.dot_de_cu)).size || 1);
-    const m = modal({ size: 'lg', title: `Tạo đề cử — ${esc(ct.vi_tri)}`, foot: '<button class="btn" data-close>Hủy</button><button class="btn primary" data-submit>Tạo đề cử (gửi Trưởng nhóm duyệt)</button>',
+    const m = modal({ size: 'lg', title: `Tạo đề cử — ${esc(ct.vi_tri)}`, foot: '<button class="btn" data-close>Hủy</button><button class="btn primary" data-submit>Tạo đề cử (gửi Quản lý duyệt)</button>',
       body: `<form novalidate><div class="form-grid">${Form.field('Đợt đề cử', 'dot_de_cu', { req: true, value: nextDot, hint: 'Mỗi hồ sơ chỉ có một đề cử trong mỗi đợt (BR6-1).' })}${Form.field('Ghi chú chung', 'ghi_chu', { ph: 'Nhận định chung về danh sách' })}</div>
         <div class="table-wrap mt"><table class="table"><thead><tr><th>Ứng viên</th><th>Năm KN</th><th>Lương mong muốn (VND)</th><th>Notice period</th></tr></thead><tbody>
         ${ids.map((id) => { const u = Q.uv(id); const hs = DB.ho_so_ung_tuyen.find((h) => h.ma_ung_vien === id && h.ma_chi_tiet_du_an === ct.id); return `<tr><td><div class="nm small strong">${esc(u.ho_ten)}</div><div class="t-sub">${hs ? (hs.ma_tin_kenh ? 'Đã apply' : 'Đã có hồ sơ') : '<span style="color:var(--amber)">Chưa apply → hệ thống tạo hồ sơ ứng tuyển</span>'}</div></td>
           <td><input class="input" style="width:80px" name="exp_${id}" type="number" step="0.5" value="${u.so_nam_kinh_nghiem ?? ''}"></td><td><input class="input" name="sal_${id}" type="number" placeholder="VD: 30000000"></td><td><input class="input" name="np_${id}" value="30 ngày"></td></tr>`; }).join('')}</tbody></table></div>
-        <div class="callout mt">${icon('info', 'sm')}<div>Đề cử lưu ở trạng thái <b>Chờ duyệt</b>; hồ sơ chuyển <b>Đề cử</b> và được ghi lịch sử. Chỉ đề cử đã được Trưởng nhóm duyệt mới được gửi khách hàng.</div></div></form>` });
+        <div class="callout mt">${icon('info', 'sm')}<div>Đề cử lưu ở trạng thái <b>Chờ duyệt</b>; hồ sơ chuyển <b>Đề cử</b> và được ghi lịch sử. Chỉ đề cử đã được Quản lý duyệt mới được gửi khách hàng.</div></div></form>` });
     submitForm(m, (v) => {
       const per = {}; ids.forEach((id) => (per[id] = { exp: v['exp_' + id] === '' ? null : Number(v['exp_' + id]), salary: v['sal_' + id], notice: v['np_' + id] }));
       const r = Svc.createRecommendations(ct.id, ids, { dot_de_cu: v.dot_de_cu, ghi_chu: v.ghi_chu, per });
       if (r.errors) return r;
       if (r.skipped?.length) toast('Bỏ qua: ' + r.skipped.map(esc).join('<br>'), 'warn', 7000);
-      if (r.ok) { toast(`Đã tạo ${r.created.length} đề cử — chờ Trưởng nhóm duyệt`); m.close(); this.picked.clear(); Store.save(); Pages.projectDetail.tab = 'decu'; Router.go('#/du-an/' + ct.id); }
+      if (r.ok) { toast(`Đã tạo ${r.created.length} đề cử — chờ Quản lý duyệt`); m.close(); this.picked.clear(); Store.save(); Pages.projectDetail.tab = 'decu'; Router.go('#/du-an/' + ct.id); }
       return r.ok ? r : { ok: false, error: r.error };
     });
   },
@@ -219,7 +219,7 @@ Pages.recommendations = {
       ['da-gui', 'Đã gửi — chờ phản hồi', (d) => d.trang_thai === ST.DC.GUI && !d.phan_hoi_khach_hang], ['phan-hoi', 'Đã có phản hồi', (d) => !!d.phan_hoi_khach_hang], ['da-go', 'Đã gỡ', (d) => d.trang_thai === ST.DC.GO], ['tat-ca', 'Tất cả', () => true]];
     if (!this.tab) this.tab = Auth.isLead() ? 'cho-duyet' : 'can-sua';
     const cur = tabs.find((t) => t[0] === this.tab) || tabs[0];
-    v.innerHTML = `<div class="page-head"><div><h1>Đề cử ứng viên</h1><p>Quy trình: Nhân viên tạo đề cử → <b>Trưởng nhóm duyệt</b> (hoặc yêu cầu chỉnh sửa kèm lý do) → gửi khách hàng → ghi nhận phản hồi.</p></div>
+    v.innerHTML = `<div class="page-head"><div><h1>Đề cử ứng viên</h1><p>Quy trình: Nhân viên tạo đề cử → <b>Quản lý duyệt</b> (hoặc yêu cầu chỉnh sửa kèm lý do) → gửi khách hàng → ghi nhận phản hồi.</p></div>
       <div class="actions"><a class="btn primary" href="#/ung-vien?ct=">${icon('filter', 'sm')} Lọc & tạo đề cử</a></div></div>
       <div class="tabs">${tabs.map(([k, l, fn]) => `<button data-t="${k}" class="${cur[0] === k ? 'active' : ''}">${l} <span class="badge sm ${k === 'cho-duyet' && Auth.isLead() ? 'amber' : k === 'can-sua' ? 'red' : ''}">${all.filter(fn).length}</span></button>`).join('')}</div><div id="rb"></div>`;
     $$('[data-t]', v).forEach((b) => (b.onclick = () => { this.tab = b.dataset.t; UI.refresh(); }));

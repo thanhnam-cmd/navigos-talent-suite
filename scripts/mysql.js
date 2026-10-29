@@ -97,7 +97,8 @@ async function createDatabase(cfg, drop = false) {
   } else console.log(`• CSDL ${cfg.DB_NAME} đã tồn tại`);
   await c.query(`CREATE USER IF NOT EXISTS ?@'localhost' IDENTIFIED BY ?`, [cfg.DB_USER, cfg.DB_PASSWORD]);
   await c.query(`ALTER USER ?@'localhost' IDENTIFIED BY ?`, [cfg.DB_USER, cfg.DB_PASSWORD]);
-  await c.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON \`${cfg.DB_NAME}\`.* TO ?@'localhost'`, [cfg.DB_USER]);
+  // ALL trên riêng CSDL dự án: cần cho migration tự động (ALTER/CREATE) khi nâng cấp lược đồ
+  await c.query(`GRANT ALL PRIVILEGES ON \`${cfg.DB_NAME}\`.* TO ?@'localhost'`, [cfg.DB_USER]);
   await c.end();
 }
 

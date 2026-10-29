@@ -11,7 +11,7 @@ const ctOpts = (filter = (c) => c.trang_thai === ST.CT.DANG) => [['', '— Chọ
 Pages.login = {
   render(root) {
     if (Auth.user) return Router.go('#/');
-    const demo = [['admin', 'Quản trị viên', 'Tài khoản & phân quyền'], ['giamdoc', 'Ban Giám đốc', 'Báo cáo, phân công, duyệt'], ['truongnhom', 'Trưởng nhóm', 'Phân công, duyệt đề cử'], ['nhanvien', 'Nhân viên', 'Xử lý hồ sơ, đề cử, phỏng vấn']];
+    const demo = [['admin', 'Quản trị viên', 'Tài khoản & phân quyền'], ['giamdoc', 'Ban Giám đốc', 'Báo cáo, phân công, duyệt'], ['quanly', 'Quản lý', 'Phân công, duyệt đề cử'], ['nhanvien', 'Nhân viên', 'Xử lý hồ sơ, đề cử, phỏng vấn']];
     root.innerHTML = `<div class="login-page">
       <section class="login-art">
         <img class="mark" src="assets/mark.png" alt="">
@@ -76,7 +76,7 @@ Pages.home = {
       const mine = DB.de_cu.filter((d) => d.ma_nguoi_tao === u.id);
       const sua = mine.filter((d) => d.trang_thai === ST.DC.SUA).length; const duyet = mine.filter((d) => d.trang_thai === ST.DC.DUYET).length;
       const choPh = mine.filter((d) => d.trang_thai === ST.DC.GUI && !d.phan_hoi_khach_hang).length;
-      if (sua) tasks.push(['edit', 'tone-red', `${sua} đề cử cần chỉnh sửa theo yêu cầu Trưởng nhóm`, '#/de-cu?tab=can-sua']);
+      if (sua) tasks.push(['edit', 'tone-red', `${sua} đề cử cần chỉnh sửa theo yêu cầu Quản lý`, '#/de-cu?tab=can-sua']);
       if (duyet) tasks.push(['send', 'tone-green', `${duyet} đề cử đã duyệt — sẵn sàng gửi khách hàng`, '#/de-cu?tab=da-duyet']);
       if (choPh) tasks.push(['clock', 'tone-amber', `${choPh} đề cử đang chờ khách hàng phản hồi`, '#/de-cu?tab=da-gui']);
     }
@@ -113,12 +113,12 @@ Pages.home = {
   admin(v, hello) {
     const ns = DB.nhan_su; const byRole = groupBy(ns.filter((n) => n.trang_thai_lam_viec === 'Đang làm việc'), (n) => n.vai_tro);
     v.innerHTML = hello + `<div class="grid g-4 kpis">
-      ${[[ROLES.ADMIN, 'shield', 'tone-violet'], [ROLES.BGD, 'star', 'tone-amber'], [ROLES.TN, 'userCheck', 'tone-blue'], [ROLES.NV, 'users', 'tone-green']].map(([r, ic, t]) => `<div class="card kpi"><div><div class="label">${r}</div><div class="value">${(byRole[r] || []).length}</div><div class="sub">tài khoản đang hoạt động</div></div><div class="ico ${t}">${icon(ic)}</div></div>`).join('')}</div>
+      ${[[ROLES.ADMIN, 'shield', 'tone-violet'], [ROLES.BGD, 'star', 'tone-amber'], [ROLES.QL, 'userCheck', 'tone-blue'], [ROLES.NV, 'users', 'tone-green']].map(([r, ic, t]) => `<div class="card kpi"><div><div class="label">${r}</div><div class="value">${(byRole[r] || []).length}</div><div class="sub">tài khoản đang hoạt động</div></div><div class="ico ${t}">${icon(ic)}</div></div>`).join('')}</div>
       <div class="grid g-2 mt">
         <div class="card"><div class="card-head"><h3>Tài khoản theo khu vực</h3></div><div class="card-body">${Charts.bars({ data: DB.khu_vuc.map((k) => ({ label: k.ten, value: ns.filter((n) => n.ma_khu_vuc === k.id && n.trang_thai_lam_viec === 'Đang làm việc').length })) })}</div></div>
         <div class="card"><div class="card-head"><h3>Tác vụ quản trị</h3></div><div class="card-body stack">
           <a class="alert" href="#/tai-khoan" style="text-decoration:none;color:inherit"><span class="ico tone-blue">${icon('plus', 'sm')}</span><div><div class="tt">Thêm tài khoản cho nhân sự mới</div><div class="ds">Mật khẩu khởi tạo được sinh tự động & mã hóa</div></div></a>
-          <a class="alert" href="#/tai-khoan" style="text-decoration:none;color:inherit"><span class="ico tone-violet">${icon('shield', 'sm')}</span><div><div class="tt">Phân quyền truy cập theo vai trò</div><div class="ds">Quản trị viên · Ban Giám đốc · Trưởng nhóm · Nhân viên</div></div></a>
+          <a class="alert" href="#/tai-khoan" style="text-decoration:none;color:inherit"><span class="ico tone-violet">${icon('shield', 'sm')}</span><div><div class="tt">Phân quyền truy cập theo vai trò</div><div class="ds">Quản trị viên · Ban Giám đốc · Quản lý · Nhân viên</div></div></a>
           <a class="alert" href="#/danh-muc" style="text-decoration:none;color:inherit"><span class="ico tone-green">${icon('layers', 'sm')}</span><div><div class="tt">Danh mục dùng chung</div><div class="ds">Khu vực, lĩnh vực, cấp bậc, chuyên môn, kênh đăng tuyển</div></div></a>
           <div class="callout">${icon('info', 'sm')}<div>Theo BR2-4, tài khoản đã phát sinh dữ liệu không bị xóa mà chuyển “Đã nghỉ việc” — tài khoản này không thể đăng nhập.</div></div>
         </div></div></div>`;
@@ -127,7 +127,7 @@ Pages.home = {
 
 /* ============ DỰ ÁN TUYỂN DỤNG (UC_04, UC_05) ============ */
 Pages.projects = {
-  state: { q: '', page: 1, tab: 'vi-tri', st: '', kh: '', cb: '', cm: '', kv: '', adv: false, sort: 'han' },
+  state: { q: '', page: 1, tab: 'vi-tri', st: '', kh: '', da: '', cb: '', cm: '', kv: '', han_tu: '', han_den: '', adv: false, sort: 'han' },
   render(v, p, query) {
     const s = this.state; if (query.tab) s.tab = query.tab; if (query.st !== undefined) s.st = query.st;
     const cts = Q.visibleCts(); const choPc = DB.chi_tiet_du_an.filter((c) => c.trang_thai === ST.CT.MOI);
@@ -156,6 +156,8 @@ Pages.projects = {
       if (s.st === 'canh-bao') { if (!Q.deadline(c)) return false; } else if (s.st && c.trang_thai !== s.st) return false;
       if (s.kh && kh.id !== Number(s.kh)) return false; if (s.cb && c.ma_cap_bac !== Number(s.cb)) return false;
       if (s.cm && c.ma_chuyen_mon !== Number(s.cm)) return false; if (s.kv && c.ma_khu_vuc !== Number(s.kv)) return false;
+      if (s.da && c.ma_du_an !== Number(s.da)) return false; // UC_04 6e: lọc theo dự án tuyển dụng & hạn hoàn thành
+      if (s.han_tu && c.han_hoan_thanh < s.han_tu) return false; if (s.han_den && c.han_hoan_thanh > s.han_den) return false;
       return true;
     });
     const order = { [ST.CT.MOI]: 0, [ST.CT.DANG]: 1, [ST.CT.XONG]: 2, [ST.CT.DONG]: 3, [ST.CT.HUY]: 4 };
@@ -171,7 +173,10 @@ Pages.projects = {
         ${Form.field('Khách hàng', 'kh', { opts: Form.opts('khach_hang', { blank: 'Tất cả' }).map(([a, b]) => [a, b]), value: s.kh })}
         ${Form.field('Cấp bậc', 'cb', { opts: Form.opts('cap_bac', { blank: 'Tất cả' }), value: s.cb })}
         ${Form.field('Chuyên môn', 'cm', { opts: Form.opts('chuyen_mon', { blank: 'Tất cả' }), value: s.cm })}
-        ${Form.field('Khu vực', 'kv', { opts: Form.opts('khu_vuc', { blank: 'Tất cả' }), value: s.kv })}</div>` : ''}
+        ${Form.field('Khu vực', 'kv', { opts: Form.opts('khu_vuc', { blank: 'Tất cả' }), value: s.kv })}
+        ${Form.field('Dự án tuyển dụng', 'da', { opts: [['', 'Tất cả'], ...DB.du_an_tuyen_dung.filter((d) => !s.kh || d.ma_khach_hang === Number(s.kh)).map((d) => [d.id, `${Code.da(d.id)} · ${d.ten_du_an}`])], value: s.da })}
+        ${Form.field('Hạn hoàn thành từ', 'han_tu', { type: 'date', value: s.han_tu })}
+        ${Form.field('Hạn hoàn thành đến', 'han_den', { type: 'date', value: s.han_den })}</div>` : ''}
       <div class="table-wrap"><table class="table responsive"><thead><tr><th>Vị trí tuyển dụng</th><th>ID dự án</th><th>Khách hàng</th><th>Thời hạn</th><th>Tiến độ</th><th>Phụ trách</th><th>Trạng thái</th></tr></thead><tbody>
       ${pg.rows.map((c) => { const kh = Q.khOfCt(c); const h = Q.hired(c.id); const pct = Math.min(100, Math.round((h / c.so_luong) * 100)); const dl = Q.deadline(c); const asg = Q.assignees(c.id);
         return `<tr class="clickable" data-id="${c.id}">
@@ -188,7 +193,7 @@ Pages.projects = {
     $('#st', body).onchange = (e) => { s.st = e.target.value; re(); };
     $('#adv', body).onclick = () => { s.adv = !s.adv; re(); };
     $$('[data-sort]', body).forEach((b) => (b.onclick = () => { s.sort = b.dataset.sort; re(); }));
-    ['kh', 'cb', 'cm', 'kv'].forEach((k) => { const el = $(`[name=${k}]`, body); if (el) el.onchange = () => { s[k] = el.value; re(); }; });
+    ['kh', 'da', 'cb', 'cm', 'kv', 'han_tu', 'han_den'].forEach((k) => { const el = $(`[name=${k}]`, body); if (el) el.onchange = () => { s[k] = el.value; if (k === 'kh') s.da = ''; re(); }; });
     $$('tr[data-id]', body).forEach((tr) => (tr.onclick = () => Router.go('#/du-an/' + tr.dataset.id)));
     $$('[data-page]', body).forEach((b) => (b.onclick = () => { s.page = Number(b.dataset.page); this.positions(body, cts); }));
     $('#xls').onclick = () => Export.excel('DanhSachViTri_' + todayStr(), 'Danh sách vị trí tuyển dụng', ['ID', 'Vị trí', 'Khách hàng', 'Dự án tuyển dụng', 'Cấp bậc', 'Khu vực', 'Số lượng', 'Đã nhận việc', 'Hạn', 'Trạng thái', 'Phụ trách'],
@@ -244,7 +249,7 @@ Pages.projectDetail = {
           ${open ? `<button class="btn" id="tin">${icon('link', 'sm')} Gắn mã tin đăng</button>` : ''}
           ${open ? `<button class="btn" id="more">${icon('more', 'sm')} Thao tác</button>` : ''}
         </div></div>
-      ${ct.trang_thai === ST.CT.MOI ? `<div class="callout amber mb">${icon('alert', 'sm')}<div>Vị trí <b>mới tiếp nhận</b>, chưa có nhân viên phụ trách. ${Auth.isLead() ? 'Hãy phân công để bắt đầu thực hiện.' : 'Chờ Trưởng nhóm phân công.'}</div></div>` : ''}
+      ${ct.trang_thai === ST.CT.MOI ? `<div class="callout amber mb">${icon('alert', 'sm')}<div>Vị trí <b>mới tiếp nhận</b>, chưa có nhân viên phụ trách. ${Auth.isLead() ? 'Hãy phân công để bắt đầu thực hiện.' : 'Chờ Quản lý phân công.'}</div></div>` : ''}
       ${ct.ly_do_dong_huy ? `<div class="callout red mb">${icon('info', 'sm')}<div><b>${ct.trang_thai}</b> — Lý do: ${esc(ct.ly_do_dong_huy)}</div></div>` : ''}
       <div class="grid g-side">
         <div class="card"><div class="card-head" style="padding-bottom:4px"><h3 style="color:var(--primary)">${icon('briefcase')} Thông tin dự án</h3></div><div class="card-body info-list">
@@ -334,7 +339,7 @@ const Comp = {
           ${d.phan_hoi_khach_hang ? `<div class="mt-sm">${badge(d.phan_hoi_khach_hang, 'sm')} <span class="small muted">${fmtDate(d.ngay_phan_hoi)}${d.ly_do_loai ? ' — ' + esc(d.ly_do_loai) : ''}</span></div>` : ''}
           ${d.ghi_chu ? `<div class="ds" style="color:var(--text-2)">${esc(d.ghi_chu)}</div>` : ''}</div></div>`).join('')}` : ''}
         ${lichs.length ? `<h4 class="mt">Phỏng vấn</h4>${lichs.map((l) => { const k = Q.kqPv(l.id); const fbs = Q.feedbacks(l.id); return `<div class="alert"><span class="ico tone-amber">${icon(l.hinh_thuc === 'Trực tuyến' ? 'video' : 'pin', 'sm')}</span><div style="flex:1"><div class="row between"><span class="tt">Vòng ${l.vong} · ${fmtTime(l.thoi_gian_bat_dau)}–${fmtTime(l.thoi_gian_ket_thuc)} ${fmtDate(l.thoi_gian_bat_dau)}</span>${badge(l.trang_thai, 'sm')}</div>
-          <div class="ds">${esc(l.hinh_thuc)} · ${esc(l.dia_diem_link)} · PIC ${esc(Q.ns(l.ma_nhan_su).ho_ten)}</div>
+          <div class="ds">${esc(l.hinh_thuc)} · ${esc(l.dia_diem_link)} · NV phỏng vấn: ${esc(Q.ns(l.ma_nhan_su).ho_ten)}</div>
           ${k ? `<div class="mt-sm">${badge(k.ket_qua, 'sm')} <b class="small">${k.diem_danh_gia ?? '—'}/10</b> <span class="small muted">${esc(k.nhan_xet || '')}</span></div>` : ''}
           ${fbs.map((f) => `<div class="ds">💬 <b>${esc(f.nguon_feedback)}:</b> ${esc(f.noi_dung)} <span class="muted">(${fmtDate(f.ngay_gui)})</span></div>`).join('')}
           ${k ? `<button class="btn xs mt-sm" data-fb="${l.id}">${icon('plus', 'sm')} Thêm feedback</button>` : ''}</div></div>`; }).join('')}` : ''}
@@ -391,7 +396,7 @@ const Comp = {
       <div class="body"><div class="row between" style="align-items:flex-start"><div class="person">${avatar(uv.ho_ten)}<div><div class="nm" style="font-size:15px">${esc(uv.ho_ten)}</div><div class="sb">${esc(ct.vi_tri)} — ${esc(Q.khOfCt(ct).ten_cong_ty)}</div><div class="sb">ID dự án: ${Code.ct(ct.id)}</div></div></div>
         <div class="row" style="gap:6px">${k ? badge(k.ket_qua) : badge(l.trang_thai === ST.LICH.LEN && past ? 'Chờ ghi nhận kết quả' : l.trang_thai, l.trang_thai === ST.LICH.LEN && past ? 'amber' : '')}</div></div>
         <div class="foot"><div><label>${icon(l.hinh_thuc === 'Trực tuyến' ? 'video' : 'pin', 'sm')} ${l.hinh_thuc === 'Trực tuyến' ? 'Họp trực tuyến' : 'Địa điểm trực tiếp'}</label>${l.hinh_thuc === 'Trực tuyến' ? `<a href="${esc(l.dia_diem_link)}" target="_blank" rel="noopener">${esc(l.dia_diem_link)}</a>` : esc(l.dia_diem_link)}</div>
-          <div><label>${icon('users', 'sm')} Nhân sự phụ trách (PIC)</label>${esc(ns.ho_ten)} <span class="muted small">(${esc(Store.name('khu_vuc', ns.ma_khu_vuc))})</span></div></div>
+          <div><label>${icon('users', 'sm')} Nhân viên phỏng vấn</label>${esc(ns.ho_ten)} <span class="muted small">(${esc(Store.name('khu_vuc', ns.ma_khu_vuc))})</span></div></div>
         <div class="row mt-sm" style="gap:6px"><button class="btn xs" data-ivhs="${hs.id}">Mở hồ sơ</button>${l.trang_thai === ST.LICH.LEN ? `${past ? `<button class="btn xs primary" data-ivres="${l.id}">${icon('checkCircle', 'sm')} Ghi nhận kết quả</button>` : ''}<button class="btn xs" data-ivedit="${l.id}">${icon('edit', 'sm')} Sửa</button><button class="btn xs" data-ivcancel="${l.id}" style="color:var(--red)">Hủy lịch</button>` : ''}</div></div></div>`;
   },
   bindIv(root) {
