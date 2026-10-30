@@ -30,7 +30,11 @@ const serial = (fn) => { const p = chain.then(fn, fn); chain = p.catch(() => {})
 
 /* ---------- Phân quyền gọi nghiệp vụ ---------- */
 const ADMIN_FNS = new Set(['saveAccount', 'resetPassword', 'setRole', 'deactivateAccount', 'addCatalog', 'toggleChannel']);
-const ADMIN_OR_LEAD_FNS = new Set(['saveScheduleRules']); // BR10-6
+// Bảng phân quyền (Fix Demo lần 1): mặc định mọi thao tác nghiệp vụ chỉ dành cho Nhân viên
+const ADMIN_OR_QL_FNS = new Set(['saveScheduleRules']); // BR10-6
+const QL_FNS = new Set(['assign', 'approveRecommendation', 'requestEdit', 'markCommentsSeen']);
+const BGD_FNS = new Set(['addRecommendationComment']);
+const ANY_FNS = new Set(['changePassword']);
 const BLOCKED = new Set(['_withdrawActive', 'ingest', 'filterCandidates', 'suggestStaff', 'genPassword']);
 
 /* ---------- Tiện ích HTTP ---------- */
@@ -114,7 +118,8 @@ async function api(req, res, url) {
     return serial(async () => {
       const u = E.Store.get('nhan_su', sessions.get(s.sid)?.uid); E.Auth.user = u;
       try {
-        const allowed = ADMIN_FNS.has(fn) ? E.Auth.isAdmin() : ADMIN_OR_LEAD_FNS.has(fn) ? E.Auth.isAdmin() || E.Auth.isLead() : E.Auth.canWork();
+        const allowed = ADMIN_FNS.has(fn) ? E.Auth.isAdmin() : ADMIN_OR_QL_FNS.has(fn) ? E.Auth.isAdmin() || E.Auth.isQL()
+          : QL_FNS.has(fn) ? E.Auth.isQL() : BGD_FNS.has(fn) ? E.Auth.isBGD() : ANY_FNS.has(fn) ? true : E.Auth.canOperate();
         if (!allowed) return send(res, 403, { ok: false, error: 'Chức năng không thuộc phạm vi vai trò của bạn.' });
         const result = E.Svc[fn](...args);
         await persistOrRollback();

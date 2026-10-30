@@ -232,7 +232,10 @@ CREATE TABLE LICH_PHONG_VAN (
   thoi_gian_ket_thuc DATETIME(3) NOT NULL,
   hinh_thuc          VARCHAR(20) NOT NULL,
   dia_diem_link      VARCHAR(500),
-  nguoi_tham_gia     TEXT,
+  nguoi_tham_gia     TEXT COMMENT 'Tổng hợp (tương thích bản cũ)',
+  nguoi_tham_gia_cong_ty    VARCHAR(500) COMMENT 'Người tham gia phía công ty',
+  nguoi_tham_gia_khach_hang VARCHAR(500) COMMENT 'Người tham gia phía khách hàng',
+  ly_do_huy          VARCHAR(500),
   trang_thai         VARCHAR(30) NOT NULL DEFAULT 'Đã lên lịch',
   vong               INT NOT NULL DEFAULT 1 COMMENT 'Vòng phỏng vấn (BR10-1)',
   INDEX ix_lich_ns_time (ma_nhan_su, thoi_gian_bat_dau),  -- kiểm tra trùng lịch BR10-2
@@ -277,6 +280,20 @@ CREATE TABLE KET_QUA_TUYEN_DUNG (
   CONSTRAINT fk_kqtd_hs FOREIGN KEY (ma_ho_so_ung_vien) REFERENCES HO_SO_UNG_TUYEN(ma_ho_so_ung_vien),
   CONSTRAINT ck_kqtd CHECK (ket_qua IN ('Chấp nhận offer','Từ chối offer')),
   CONSTRAINT ck_kqtd_ngay CHECK (ket_qua <> 'Chấp nhận offer' OR ngay_nhan_viec IS NOT NULL)
+) ENGINE=InnoDB;
+
+-- ---------- Góp ý đề cử của Ban Giám đốc (Fix Demo lần 1 — Quản lý nhận góp ý) ----------
+CREATE TABLE GOP_Y_DE_CU (
+  ma_gop_y       INT AUTO_INCREMENT PRIMARY KEY,
+  ma_de_cu       INT NOT NULL,
+  ma_nguoi_gop_y INT NOT NULL COMMENT 'Thành viên Ban Giám đốc',
+  noi_dung       TEXT NOT NULL,
+  ngay_gop_y     DATETIME(3) NOT NULL,
+  trang_thai     VARCHAR(30) NOT NULL DEFAULT 'Chờ Quản lý xem',
+  ngay_xem       DATETIME(3) NULL,
+  CONSTRAINT fk_gy_dc FOREIGN KEY (ma_de_cu) REFERENCES DE_CU(ma_de_cu),
+  CONSTRAINT fk_gy_ns FOREIGN KEY (ma_nguoi_gop_y) REFERENCES NHAN_SU(ma_nhan_su),
+  CONSTRAINT ck_gy_tt CHECK (trang_thai IN ('Chờ Quản lý xem','Đã xem'))
 ) ENGINE=InnoDB;
 
 -- ---------- Quy tắc xếp lịch phỏng vấn (màn hình "Quy tắc xếp lịch phỏng vấn" — BR10-6) ----------

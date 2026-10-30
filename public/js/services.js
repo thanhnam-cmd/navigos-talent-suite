@@ -51,6 +51,10 @@ const Q = {
     const assigned = new Set(DB.phan_cong.filter((p) => p.ma_nhan_su === me && p.trang_thai === 'Đang phụ trách').map((p) => p.ma_chi_tiet_du_an));
     return DB.chi_tiet_du_an.filter((c) => assigned.has(c.id) || c.ma_nguoi_tao === me);
   },
+  /** Bảng phân quyền: chỉ nhân viên tạo vị trí mới sửa / gắn mã tin / đóng-hủy */
+  isCreator(ct) { return App.seeding || (!!ct && Auth.isStaff() && ct.ma_nguoi_tao === Auth.user?.id); },
+  /** Góp ý của Ban Giám đốc cho một đề cử */
+  comments(dcId) { return (DB.gop_y_de_cu || []).filter((g) => g.ma_de_cu === Number(dcId)).sort((a, b) => a.ngay_gop_y.localeCompare(b.ngay_gop_y)); },
   canHandleCt(ct) { return Auth.isLead() || this.visibleCts().some((c) => c.id === ct.id); },
   age(uv) { return uv.nam_sinh ? now().getFullYear() - uv.nam_sinh : null; },
   isNormalized(uv) { return !!uv.ma_nhan_su; },
@@ -184,6 +188,31 @@ const Svc = {
     const k = Store.get('kenh_dang_tuyen', id); k.trang_thai = k.trang_thai === 'Hoạt động' ? 'Ngừng hoạt động' : 'Hoạt động'; Store.save(); return { ok: true };
   },
 
+  /* ===== Góp ý đề cử của Ban Giám đốc → Quản lý nhận (Fix Demo lần 1) ===== */
+  addRecommendationComment(dcId, noiDung) {
+    if (!Auth.isBGD() && !App.seeding) return fail('Chỉ Ban Giám đốc được gửi góp ý đề cử.');
+    const d = Store.get('de_cu', dcId); if (!d) return fail('Không tìm thấy đề cử.');
+    noiDung = String(noiDung || '').trim(); if (!noiDung) return bad({ noi_dung: 'Nhập nội dung góp ý.' });
+    if (noiDung.length > 2000) return bad({ noi_dung: 'Tối đa 2000 ký tự.' });
+    const g = Store.insert('gop_y_de_cu', { ma_de_cu: d.id, ma_nguoi_gop_y: Auth.user.id, noi_dung: noiDung, ngay_gop_y: nowISO(), trang_thai: 'Chờ Quản lý xem', ngay_xem: null });
+    Store.save(); return { ok: true, row: g };
+  },
+  markCommentsSeen(dcIds) {
+    if (!Auth.isQL()) return fail('Chỉ Quản lý nhận góp ý.');
+    let n = 0; (DB.gop_y_de_cu || []).filter((g) => dcIds.map(Number).includes(g.ma_de_cu) && g.trang_thai !== 'Đã xem').forEach((g) => { g.trang_thai = 'Đã xem'; g.ngay_xem = nowISO(); n++; });
+    Store.save(); return { ok: true, seen: n };
+  },
+  /** Đổi mật khẩu — mọi vai trò (bảng phân quyền) */
+  changePassword(oldPw, newPw, confirmPw) {
+    const u = Auth.user; const e = {};
+    if (!u || u.mat_khau !== hashPw(String(oldPw || ''))) e.mk_cu = 'Mật khẩu hiện tại không đúng.';
+    if (String(newPw || '').length < 6) e.mk_moi = 'Mật khẩu mới tối thiểu 6 ký tự.';
+    else if (newPw === oldPw) e.mk_moi = 'Mật khẩu mới phải khác mật khẩu hiện tại.';
+    if (newPw !== confirmPw) e.mk_xn = 'Xác nhận mật khẩu không khớp.';
+    if (Object.keys(e).length) return bad(e);
+    u.mat_khau = hashPw(newPw); Store.save(); return { ok: true };
+  },
+
   /* ===== UC_03 Khách hàng ===== */
   saveCustomer(data, id = null) {
     const e = {};
@@ -210,6 +239,7 @@ const Svc = {
     Store.save(); return { ok: true, row: d };
   },
   savePosition(data, id = null) {
+    if (id && !Q.isCreator(Q.ct(id))) return fail('Chỉ nhân viên tạo vị trí này mới được sửa.');
     const e = {};
     ['ma_du_an', 'vi_tri', 'so_luong', 'hinh_thuc', 'han_hoan_thanh', 'ma_cap_bac', 'ma_chuyen_mon', 'ma_khu_vuc'].forEach((k) => { if (!data[k]) e[k] = 'Bắt buộc nhập.'; });
     if (data.so_luong && !(Number(data.so_luong) > 0)) e.so_luong = 'Số lượng phải lớn hơn 0.';
@@ -223,6 +253,7 @@ const Svc = {
     recalcDa(Q.da(ct.ma_du_an)); Store.save(); return { ok: true, row: ct };
   },
   closePosition(id, type, reason) {
+    if (!Q.isCreator(Q.ct(id))) return fail('Chỉ nhân viên tạo vị trí này mới được đóng hoặc hủy.');
     if (!reason) return fail('Bắt buộc nhập lý do (BR4-2).');
     const ct = Q.ct(id); if (CT_CLOSED.includes(ct.trang_thai)) return fail('Dự án đã kết thúc.');
     ct.trang_thai = type === 'huy' ? ST.CT.HUY : ST.CT.DONG; ct.ly_do_dong_huy = reason;
@@ -237,6 +268,7 @@ const Svc = {
   },
   /** UC_04 6a — Gắn mã tin đăng (BR4-3) */
   attachPosting(ctId, data) {
+    if (!Q.isCreator(Q.ct(ctId))) return fail('Chỉ nhân viên tạo vị trí này mới được gắn mã tin đăng.');
     const e = {}; if (!data.ma_kenh) e.ma_kenh = 'Chọn kênh đăng tuyển.'; if (!data.ma_tin_kenh) e.ma_tin_kenh = 'Nhập mã tin đăng trên kênh.';
     if (data.ma_tin_kenh && DB.tin_dang.some((t) => t.ma_kenh === Number(data.ma_kenh) && norm(t.ma_tin_kenh) === norm(data.ma_tin_kenh))) e.ma_tin_kenh = 'Mã tin này đã được gắn cho một dự án khác.';
     if (Object.keys(e).length) return bad(e);
@@ -245,11 +277,11 @@ const Svc = {
     let n = 0; DB.ho_so_ung_tuyen.filter((h) => !h.ma_chi_tiet_du_an && norm(h.ma_tin_kenh) === norm(t.ma_tin_kenh)).forEach((h) => { h.ma_chi_tiet_du_an = Number(ctId); logStatus(h, ST.HS.APPLY, `Tự động gắn dự án theo mã tin ${t.ma_tin_kenh}`); n++; });
     Store.save(); return { ok: true, row: t, matched: n };
   },
-  removePosting(id) { const t = Store.get('tin_dang', id); t.trang_thai = 'Đã gỡ tin'; Store.save(); return { ok: true }; },
+  removePosting(id) { const t = Store.get('tin_dang', id); if (!Q.isCreator(Q.ct(t.ma_chi_tiet_du_an))) return fail('Chỉ nhân viên tạo vị trí này mới được gỡ tin.'); t.trang_thai = 'Đã gỡ tin'; Store.save(); return { ok: true }; },
 
   /* ===== UC_05 Phân công — BR5-1..4 ===== */
   assign(ctId, staffIds, replace = false) {
-    if (!Auth.isLead() && !App.seeding) return fail('Chỉ Ban Giám đốc / Quản lý được phân công (BR5-1).');
+    if (!Auth.isQL() && !App.seeding) return fail('Chỉ Quản lý được phân công nhân viên phụ trách.');
     staffIds = (staffIds || []).map(Number).filter(Boolean);
     if (!staffIds.length) return fail('Chưa chọn nhân viên phụ trách.');
     const ct = Q.ct(ctId); if (CT_CLOSED.includes(ct.trang_thai)) return fail('Dự án đã kết thúc, không thể phân công.');
@@ -417,7 +449,7 @@ const Svc = {
   /* ===== UC_06 Tạo đề cử — BR6-1..5 ===== */
   createRecommendations(ctId, uvIds, info) {
     const ct = Q.ct(ctId);
-    if (!ct) return fail('Chọn dự án (ID dự án) trước khi tạo đề cử.');
+    if (!ct) return fail('Chọn vị trí (ID vị trí) trước khi tạo đề cử.');
     if (ct.trang_thai !== ST.CT.DANG) return fail('Chỉ tạo đề cử cho dự án ở trạng thái “Đang thực hiện”.');
     if (!uvIds.length) return fail('Chưa tick chọn ứng viên nào.');
     if (!info.dot_de_cu) return bad({ dot_de_cu: 'Nhập đợt đề cử.' });
@@ -443,12 +475,12 @@ const Svc = {
   },
   /** UC_06 bước 8 — Duyệt / Yêu cầu chỉnh sửa (BR6-4) */
   approveRecommendation(id) {
-    if (!Auth.isLead() && !App.seeding) return fail('Chỉ Ban Giám đốc / Quản lý được duyệt đề cử (BR6-4).');
+    if (!Auth.isQL() && !App.seeding) return fail('Chỉ Quản lý được duyệt đề cử.');
     const d = Store.get('de_cu', id); if (d.trang_thai !== ST.DC.CHO) return fail('Đề cử không ở trạng thái Chờ duyệt.');
     Object.assign(d, { trang_thai: ST.DC.DUYET, ma_nguoi_duyet: Auth.user.id, ngay_duyet: nowISO() }); Store.save(); return { ok: true };
   },
   requestEdit(id, reason) {
-    if (!Auth.isLead()) return fail('Chỉ Ban Giám đốc / Quản lý được yêu cầu chỉnh sửa.');
+    if (!Auth.isQL() && !App.seeding) return fail('Chỉ Quản lý được yêu cầu chỉnh sửa đề cử.');
     if (!reason) return fail('Nhập lý do yêu cầu chỉnh sửa.');
     const d = Store.get('de_cu', id); if (d.trang_thai !== ST.DC.CHO) return fail('Đề cử không ở trạng thái Chờ duyệt.');
     Object.assign(d, { trang_thai: ST.DC.SUA, ma_nguoi_duyet: Auth.user.id, ngay_duyet: nowISO(), ghi_chu: [d.ghi_chu, `Yêu cầu sửa (${Auth.user.ho_ten}): ${reason}`].filter(Boolean).join(' | ') });
@@ -518,7 +550,9 @@ const Svc = {
         errors: { ma_nhan_su: `Trùng lịch: ${ns.ho_ten} đã có buổi phỏng vấn ${cu.ho_ten} (${fmtTime(c.thoi_gian_bat_dau)}–${fmtTime(c.thoi_gian_ket_thuc)} ${fmtDate(c.thoi_gian_bat_dau)}). Không thể lưu — hãy chọn nhân viên khác; thời gian giữ nguyên vì do khách hàng quyết định (BR10-5).` } };
     }
     if (chk.warnings.length && !data.xac_nhan_canh_bao) return { ok: false, needConfirm: true, warnings: chk.warnings };
-    const row = { ma_nhan_su: Number(data.ma_nhan_su), thoi_gian_bat_dau: bd.toISOString(), thoi_gian_ket_thuc: kt.toISOString(), hinh_thuc: data.hinh_thuc, dia_diem_link: data.dia_diem_link, nguoi_tham_gia: data.nguoi_tham_gia };
+    const row = { ma_nhan_su: Number(data.ma_nhan_su), thoi_gian_bat_dau: bd.toISOString(), thoi_gian_ket_thuc: kt.toISOString(), hinh_thuc: data.hinh_thuc, dia_diem_link: data.dia_diem_link,
+      nguoi_tham_gia_cong_ty: data.nguoi_tham_gia_cong_ty || '', nguoi_tham_gia_khach_hang: data.nguoi_tham_gia_khach_hang || '',
+      nguoi_tham_gia: [data.nguoi_tham_gia_cong_ty, data.nguoi_tham_gia_khach_hang].filter(Boolean).join(', ') || data.nguoi_tham_gia || '' };
     if (id) { const l = Store.get('lich_phong_van', id); if (l.trang_thai !== ST.LICH.LEN) return fail('Chỉ sửa lịch “Đã lên lịch” (BR10-4).'); Object.assign(l, row); Store.save(); return { ok: true, row: l }; }
     const vong = Q.lichOfHs(hs.id).filter((l) => l.trang_thai !== ST.LICH.HUY).length + 1;
     const l = Store.insert('lich_phong_van', { ma_ho_so_ung_vien: hs.id, ...row, trang_thai: ST.LICH.LEN, vong });
@@ -527,7 +561,7 @@ const Svc = {
   },
   /** Màn hình "Quy tắc xếp lịch phỏng vấn" — BR10-6 */
   saveScheduleRules(data) {
-    if (!Auth.isAdmin() && !Auth.isLead()) return fail('Chỉ Quản trị viên, Ban Giám đốc / Quản lý được cấu hình quy tắc xếp lịch.');
+    if (!Auth.isAdmin() && !Auth.isQL()) return fail('Chỉ Quản trị viên hoặc Quản lý được cấu hình quy tắc xếp lịch.');
     const e = {}; const n = (k, lo, hi) => { const v = Number(data[k]); if (data[k] === '' || isNaN(v) || v < lo || v > hi) e[k] = `Nhập số từ ${lo} đến ${hi}.`; return Math.round(v); };
     const row = { khoang_nghi_phut: n('khoang_nghi_phut', 0, 240), di_chuyen_phut: n('di_chuyen_phut', 0, 720), so_buoi_toi_da: n('so_buoi_toi_da', 1, 20),
       gio_bat_dau: data.gio_bat_dau, gio_ket_thuc: data.gio_ket_thuc, canh_bao_cuoi_tuan: data.canh_bao_cuoi_tuan ? 1 : 0 };
@@ -541,7 +575,8 @@ const Svc = {
   },
   cancelInterview(id, reason) {
     const l = Store.get('lich_phong_van', id); if (l.trang_thai !== ST.LICH.LEN) return fail('Chỉ hủy lịch “Đã lên lịch” (BR10-4).');
-    l.trang_thai = ST.LICH.HUY; l.nguoi_tham_gia = [l.nguoi_tham_gia, 'Lý do hủy: ' + (reason || '—')].filter(Boolean).join(' | ');
+    if (!reason) return fail('Nhập lý do hủy lịch.');
+    l.trang_thai = ST.LICH.HUY; l.ly_do_huy = reason;
     Store.save(); return { ok: true };
   },
   /** UC_11 — Kết quả phỏng vấn & feedback (BR11-1..3) */
@@ -559,6 +594,23 @@ const Svc = {
     const hs = Q.hs(l.ma_ho_so_ung_vien);
     if (data.ket_qua === 'Không đạt') logStatus(hs, ST.HS.LOAI, `Không đạt phỏng vấn vòng ${l.vong}${data.nhan_xet ? ': ' + data.nhan_xet : ''}`);
     else logStatus(hs, ST.HS.PV, data.ket_qua === 'Đạt' ? `Đạt phỏng vấn vòng ${l.vong} — chờ kết quả tuyển dụng từ khách hàng` : `Cần phỏng vấn thêm sau vòng ${l.vong}`);
+    Store.save(); return { ok: true };
+  },
+  /** UC_11 1c — sửa kết quả phỏng vấn đã ghi nhận */
+  updateInterviewResult(lichId, data) {
+    const l = Store.get('lich_phong_van', lichId); const kq = Q.kqPv(l.id); const e = {};
+    if (!kq) return fail('Lịch chưa có kết quả để sửa.');
+    const hs = Q.hs(l.ma_ho_so_ung_vien);
+    const later = Q.lichOfHs(hs.id).some((x) => x.id !== l.id && x.trang_thai !== ST.LICH.HUY && x.thoi_gian_bat_dau > l.thoi_gian_bat_dau);
+    if (Q.kqTd(hs.id)) return fail('Hồ sơ đã có kết quả tuyển dụng — không sửa được kết quả phỏng vấn.');
+    if (data.ket_qua !== kq.ket_qua && later) return fail('Đã có vòng phỏng vấn sau — chỉ sửa được điểm và nhận xét.');
+    if (!data.ket_qua) e.ket_qua = 'Chọn kết quả.';
+    if (data.diem_danh_gia !== '' && (isNaN(data.diem_danh_gia) || Number(data.diem_danh_gia) < 0 || Number(data.diem_danh_gia) > 10)) e.diem_danh_gia = 'Điểm từ 0 đến 10.';
+    if (Object.keys(e).length) return bad(e);
+    const changed = data.ket_qua !== kq.ket_qua;
+    Object.assign(kq, { ket_qua: data.ket_qua, diem_danh_gia: data.diem_danh_gia === '' ? null : Math.round(Number(data.diem_danh_gia) * 10) / 10, nhan_xet: data.nhan_xet });
+    if (data.feedback) Store.insert('feedback', { ma_lich: l.id, nguon_feedback: 'Khách hàng', noi_dung: data.feedback, ngay_gui: nowISO() });
+    if (changed) logStatus(hs, data.ket_qua === 'Không đạt' ? ST.HS.LOAI : ST.HS.PV, `Sửa kết quả phỏng vấn vòng ${l.vong}: ${data.ket_qua}`);
     Store.save(); return { ok: true };
   },
   addFeedback(lichId, content, source = 'Khách hàng') { if (!content) return fail('Nhập nội dung feedback.'); Store.insert('feedback', { ma_lich: Number(lichId), nguon_feedback: source, noi_dung: content, ngay_gui: nowISO() }); Store.save(); return { ok: true }; },
@@ -675,6 +727,7 @@ const Shell = {
     const cts = Auth.canWork() ? Q.visibleCts() : []; const ctIds = new Set(cts.map((c) => c.id)); const t = todayStr();
     return {
       choPhanCong: DB.chi_tiet_du_an.filter((c) => c.trang_thai === ST.CT.MOI).length,
+      gopYMoi: Auth.isQL() ? new Set((DB.gop_y_de_cu || []).filter((g) => g.trang_thai !== 'Đã xem').map((g) => g.ma_de_cu)).size : 0,
       choDuyet: DB.de_cu.filter((d) => d.trang_thai === ST.DC.CHO).length,
       canSua: DB.de_cu.filter((d) => d.trang_thai === ST.DC.SUA && d.ma_nguoi_tao === Auth.user.id).length,
       choGan: DB.ho_so_ung_tuyen.filter((h) => !h.ma_chi_tiet_du_an && h.trang_thai === ST.HS.APPLY).length,
@@ -686,8 +739,9 @@ const Shell = {
     if (!Auth.canWork()) return [];
     const out = []; const c = this.counts();
     Q.visibleCts().forEach((ct) => { const dl = Q.deadline(ct); if (dl) out.push({ ic: 'clock', tone: dl.level, title: `${ct.vi_tri} — ${dl.text}`, desc: `${Code.ct(ct.id)} · ${Q.khOfCt(ct)?.ten_cong_ty} · ${Q.hired(ct.id)}/${ct.so_luong} đã nhận việc`, href: '#/du-an/' + ct.id }); });
-    if (Auth.isLead() && c.choPhanCong) out.push({ ic: 'userCheck', tone: 'blue', title: `${c.choPhanCong} vị trí mới tiếp nhận chờ phân công`, desc: 'Phân công nhân viên phụ trách để bắt đầu thực hiện', href: '#/du-an?tab=phan-cong' });
-    if (Auth.isLead() && c.choDuyet) out.push({ ic: 'send', tone: 'amber', title: `${c.choDuyet} đề cử chờ duyệt`, desc: 'Duyệt hoặc yêu cầu chỉnh sửa trước khi gửi khách hàng', href: '#/de-cu?tab=cho-duyet' });
+    if (Auth.isQL() && c.gopYMoi) out.push({ ic: 'info', tone: 'violet', title: `${c.gopYMoi} đề cử có góp ý mới của Ban Giám đốc`, desc: 'Xem góp ý trong Danh sách đề cử', href: '#/de-cu' });
+    if (Auth.isQL() && c.choPhanCong) out.push({ ic: 'userCheck', tone: 'blue', title: `${c.choPhanCong} vị trí mới tiếp nhận chờ phân công`, desc: 'Phân công nhân viên phụ trách để bắt đầu thực hiện', href: '#/du-an?tab=phan-cong' });
+    if (Auth.isQL() && c.choDuyet) out.push({ ic: 'send', tone: 'amber', title: `${c.choDuyet} đề cử chờ duyệt`, desc: 'Duyệt hoặc yêu cầu chỉnh sửa trước khi gửi khách hàng', href: '#/de-cu?tab=cho-duyet' });
     if (c.canSua) out.push({ ic: 'edit', tone: 'red', title: `${c.canSua} đề cử cần chỉnh sửa`, desc: 'Quản lý đã yêu cầu chỉnh sửa', href: '#/de-cu?tab=can-sua' });
     if (c.pvHomNay) out.push({ ic: 'calendar', tone: 'violet', title: `${c.pvHomNay} buổi phỏng vấn hôm nay`, desc: 'Xem lịch và chuẩn bị tham gia cùng khách hàng', href: '#/phong-van' });
     if (c.choGan) out.push({ ic: 'inbox', tone: 'amber', title: `${c.choGan} hồ sơ apply chờ gán dự án`, desc: 'Mã tin chưa đối chiếu được với dự án nào', href: '#/thu-thap?tab=cho-gan' });

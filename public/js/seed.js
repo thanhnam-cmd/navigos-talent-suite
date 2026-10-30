@@ -76,7 +76,7 @@ const Seed = (() => {
     /* --- Kênh đăng tuyển --- */
     const K = (ten_kenh, ten_mien, tien_to, mo_ta, loai = 'ngoai') => ins('kenh_dang_tuyen', { ten_kenh, ten_mien, tien_to, mo_ta, trang_thai: 'Hoạt động', loai });
     const vnw = K('VietnamWorks', 'vietnamworks.com', 'VNW', 'Cổng việc làm của Navigos Group — đồng bộ qua API nội bộ');
-    const topcv = K('TopCV', 'topcv.vn', 'TCV', 'Thu thập hồ sơ apply qua trình thu thập (crawler) theo mã tin');
+    const topcv = K('Khác', '', 'KHC', 'Nguồn khác: email ứng tuyển, giới thiệu, sự kiện tuyển dụng… (gắn mã tin nội bộ)');
     const lkd = K('LinkedIn', 'linkedin.com', 'LKD', 'LinkedIn Jobs — nhận hồ sơ Easy Apply');
     const nvs = K('Navigos Search Website', 'navigossearch.com', 'NVS', 'Form ứng tuyển trên website Navigos Search');
     K('Facebook Jobs', 'facebook.com', 'FBJ', 'Nhóm tuyển dụng Facebook — thu thập bằng crawler');
@@ -105,7 +105,7 @@ const Seed = (() => {
         const p = person(); const c = contact(p); const exp = int(expRange[0], expRange[1]);
         out.push(ins('ung_vien', { ma_linh_vuc: rand() < 0.75 ? lvByCm[cm] : int(1, 7), ma_cap_bac: int(cbRange[0], cbRange[1]), ma_chuyen_mon: cm, ma_khu_vuc: pick(kvByCm[cm]), ma_nhan_su: pick([tram.id, ha.id, phuc.id, tam.id, bao.id]),
           ...p, nam_sinh: now().getFullYear() - (22 + exp + int(0, 4)), ...c, dia_chi: '', trinh_do_hoc_van: pick(EDU), so_nam_kinh_nghiem: exp, ky_nang: skillsFor(cm, int(3, 5)),
-          nguon: pick(['Kho dữ liệu nội bộ', 'VietnamWorks', 'LinkedIn', 'TopCV', 'Navigos Search Website']), cv_dinh_kem: 'CV_' + strip(p.ho_ten) + '.pdf', ghi_chu: '', trang_thai: ST.UV.HD, ngay_tao: nowISO() }));
+          nguon: pick(['Kho dữ liệu nội bộ', 'VietnamWorks', 'LinkedIn', 'Khác', 'Navigos Search Website']), cv_dinh_kem: 'CV_' + strip(p.ho_ten) + '.pdf', ghi_chu: '', trang_thai: ST.UV.HD, ngay_tao: nowISO() }));
       }
       return out;
     };
@@ -170,7 +170,7 @@ const Seed = (() => {
       while ([0, 6].includes(ivDay.getDay())) ivDay.setDate(ivDay.getDate() + 1); // lịch mẫu rơi vào ngày làm việc
       let ok = null;
       for (let k = 0; k < 8 && !ok?.ok; k++) { hourSlot = hourSlot >= 16 ? 8 : hourSlot + 1; const off = rand() < 0.5;
-        ok = Svc.saveInterview(hs.id, { ngay: toDateStr(ivDay), gio_bd: `${pad(hourSlot)}:00`, gio_kt: `${pad(hourSlot)}:45`, hinh_thuc: off ? 'Trực tiếp' : 'Trực tuyến', dia_diem_link: off ? `Văn phòng ${Q.khOfCt(ct).ten_cong_ty.replace(/^Công ty (CP|TNHH) /, '')} — ${Store.name('khu_vuc', ct.ma_khu_vuc)}` : `https://meet.google.com/${strip(uv.ho_ten).slice(0, 3)}-${int(1000, 9999)}-nvg`, ma_nhan_su: staff.id, nguoi_tham_gia: `${staff.ho_ten} (Navigos), ${Q.khOfCt(ct).nguoi_lien_he}`, xac_nhan_canh_bao: true }); }
+        ok = Svc.saveInterview(hs.id, { ngay: toDateStr(ivDay), gio_bd: `${pad(hourSlot)}:00`, gio_kt: `${pad(hourSlot)}:45`, hinh_thuc: off ? 'Trực tiếp' : 'Trực tuyến', dia_diem_link: off ? `Văn phòng ${Q.khOfCt(ct).ten_cong_ty.replace(/^Công ty (CP|TNHH) /, '')} — ${Store.name('khu_vuc', ct.ma_khu_vuc)}` : `https://meet.google.com/${strip(uv.ho_ten).slice(0, 3)}-${int(1000, 9999)}-nvg`, ma_nhan_su: staff.id, nguoi_tham_gia_cong_ty: `${staff.ho_ten} (Navigos)`, nguoi_tham_gia_khach_hang: Q.khOfCt(ct).nguoi_lien_he, xac_nhan_canh_bao: true }); }
       if (future) return hs;
       const lich = Q.lichOfHs(hs.id).at(-1); App.clock = new Date(lich.thoi_gian_ket_thuc).getTime() + 3600000; Auth.user = staff;
       const kq = { pv_khong: 'Không đạt', pv_them: 'Cần phỏng vấn thêm' }[target] || 'Đạt';
@@ -237,6 +237,10 @@ const Seed = (() => {
     run(ct10, {}, 40, 3); Auth.user = bao; at(9, 16); Svc.closePosition(ct10.id, 'dong', 'Khách hàng tạm dừng tuyển do tái cấu trúc vận hành');
     // Kịch bản demo: Long đang ở 2 dự án — Đạt PV tại FinNext, đồng thời đã được duyệt đề cử tại Ánh Dương AI
     drive(ct1, long, 'pv_dat', 12); drive(ct9, long, 'decu_duyet', 6);
+    // Góp ý mẫu của Ban Giám đốc cho một đề cử đã duyệt (Quản lý nhận góp ý)
+    Auth.user = gd; at(3, 15);
+    const dcLong = DB.de_cu.filter((d) => Q.hs(d.ma_ho_so_ung_vien).ma_ung_vien === long.id && d.trang_thai === ST.DC.DUYET).at(-1);
+    if (dcLong) Svc.addRecommendationComment(dcLong.id, 'Ứng viên đang ở vòng phỏng vấn cuối của FinNext — đề nghị Quản lý xác nhận nguyện vọng trước khi gửi khách hàng Ánh Dương AI để tránh trùng offer.');
 
     /* --- Hồ sơ cào về gần đây: vài hồ sơ chờ gán (mã tin không khớp), vài hồ sơ chưa chuẩn hóa --- */
     Auth.user = null; at(1, 7);

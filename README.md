@@ -66,7 +66,8 @@ LDCoffe/
 ├─ scripts/
 │  ├─ mysql.js               Quản lý instance MySQL (setup/start/stop/status/reset)
 │  └─ smoke-test.js          Kiểm thử API + MySQL
-└─ docs/NGHIEP_VU.md         Nghiệp vụ, vòng đời ứng viên, kịch bản demo
+├─ docs/NGHIEP_VU.md         Nghiệp vụ, vòng đời ứng viên, kịch bản demo
+└─ docs/FIX_DEMO_LAN1.md     Phân tích nhận xét khách hàng (Fix Demo lần 1) và cách xử lý
 ```
 
 ## Kiến trúc

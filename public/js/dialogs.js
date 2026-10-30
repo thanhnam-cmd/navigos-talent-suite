@@ -118,7 +118,8 @@ const Dlg = {
         ${Form.field('Giờ kết thúc', 'gio_kt', { type: 'time', req: true, value: fmtTime(defEnd) })}
         ${Form.field('Hình thức', 'hinh_thuc', { req: true, value: l?.hinh_thuc || 'Trực tuyến', opts: ['Trực tuyến', 'Trực tiếp'] })}
         ${Form.field('Đường dẫn / Địa điểm', 'dia_diem_link', { req: true, value: l?.dia_diem_link || '', ph: 'https://meet.google.com/… hoặc địa chỉ văn phòng khách hàng' })}
-        ${Form.field('Người tham gia', 'nguoi_tham_gia', { value: l?.nguoi_tham_gia || `${Q.ns(defNs).ho_ten} (Navigos), ${Q.khOfCt(ct).nguoi_lien_he}`, full: true })}
+        ${Form.field('Người tham gia — phía công ty', 'nguoi_tham_gia_cong_ty', { value: l ? l.nguoi_tham_gia_cong_ty || '' : `${Q.ns(defNs).ho_ten} (Navigos)` })}
+        ${Form.field('Người tham gia — phía khách hàng', 'nguoi_tham_gia_khach_hang', { value: l ? l.nguoi_tham_gia_khach_hang || '' : Q.khOfCt(ct).nguoi_lien_he })}
         <div class="full" id="ivCheck"></div></form>
         <p class="muted small" style="margin:10px 0 0">Quy tắc đang áp dụng: nghỉ tối thiểu ${R.khoang_nghi_phut}′ giữa hai buổi · di chuyển khác khu vực ${R.di_chuyen_phut}′ · giờ làm việc ${R.gio_bat_dau}–${R.gio_ket_thuc}${Number(R.canh_bao_cuoi_tuan) ? ' · cảnh báo cuối tuần' : ''} · tối đa ${R.so_buoi_toi_da} buổi/ngày.</p>` });
     const f = m.$('form');
@@ -140,7 +141,7 @@ const Dlg = {
     };
     let prevNs = Number(defNs);
     f.ma_nhan_su.addEventListener('change', () => { // đổi nhân viên phỏng vấn → cập nhật danh sách người tham gia
-      const a = Q.ns(prevNs)?.ho_ten, b = Q.ns(f.ma_nhan_su.value)?.ho_ten; if (a && b && f.nguoi_tham_gia.value.includes(a)) f.nguoi_tham_gia.value = f.nguoi_tham_gia.value.replace(a, b); prevNs = Number(f.ma_nhan_su.value);
+      const a = Q.ns(prevNs)?.ho_ten, b = Q.ns(f.ma_nhan_su.value)?.ho_ten; if (a && b && f.nguoi_tham_gia_cong_ty.value.includes(a)) f.nguoi_tham_gia_cong_ty.value = f.nguoi_tham_gia_cong_ty.value.replace(a, b); prevNs = Number(f.ma_nhan_su.value);
     });
     ['ngay', 'gio_bd', 'gio_kt', 'hinh_thuc', 'ma_nhan_su'].forEach((k) => f[k].addEventListener('change', check));
     ['gio_bd', 'gio_kt'].forEach((k) => f[k].addEventListener('input', check));
@@ -161,17 +162,121 @@ const Dlg = {
       return r;
     });
   },
-  interviewResult(lichId, then) {
-    const l = Store.get('lich_phong_van', lichId); const uv = Q.uv(Q.hs(l.ma_ho_so_ung_vien).ma_ung_vien);
-    const m = modal({ title: `Kết quả phỏng vấn vòng ${l.vong} — ${esc(uv.ho_ten)}`, foot: foot('Lưu kết quả'),
+  /** UC_11 — Ghi nhận / sửa kết quả phỏng vấn (mẫu "Ghi nhận kết quả phỏng vấn" — Fix Demo lần 1) */
+  interviewResult(lichId, then, { edit = false } = {}) {
+    const l = Store.get('lich_phong_van', lichId); const hs = Q.hs(l.ma_ho_so_ung_vien); const uv = Q.uv(hs.ma_ung_vien); const ct = Q.ct(hs.ma_chi_tiet_du_an);
+    const kq = Q.kqPv(l.id); const fbs = Q.feedbacks(l.id);
+    const m = modal({ title: edit ? 'Sửa kết quả phỏng vấn' : 'Ghi nhận kết quả phỏng vấn', foot: foot(edit ? 'Lưu thay đổi' : 'Lưu kết quả'),
+      body: `<div class="alert mb"><div class="person" style="flex:1">${avatar(uv.ho_ten)}<div><div class="nm">${esc(uv.ho_ten)}</div><div class="sb">${Code.hs(hs.id)} · ${esc(ct.vi_tri)} · ${esc(Q.khOfCt(ct).ten_cong_ty.replace(/^(Công ty (CP|TNHH)|Ngân hàng TMCP) /, ''))}</div></div></div>
+          <div style="text-align:right"><div class="strong small">${fmtDate(l.thoi_gian_bat_dau)} · ${fmtTime(l.thoi_gian_bat_dau)} – ${fmtTime(l.thoi_gian_ket_thuc)}</div><div class="muted small">Vòng ${l.vong} · ${esc(Q.ns(l.ma_nhan_su).ho_ten)}</div></div></div>
+        <form class="form-grid" novalidate>
+        <div class="field full"><label>Kết quả phỏng vấn <span class="req">*</span></label><div class="grid g-3" id="kq" style="gap:8px">${['Đạt', 'Không đạt', 'Cần phỏng vấn thêm'].map((t) => `<button type="button" class="btn ${kq?.ket_qua === t ? 'outline-primary' : ''}" data-v="${t}">${t}</button>`).join('')}</div><input type="hidden" name="ket_qua" value="${esc(kq?.ket_qua || '')}"></div>
+        ${Form.field('Điểm (0–10)', 'diem_danh_gia', { type: 'number', value: kq?.diem_danh_gia ?? '', attrs: 'min="0" max="10" step="0.1"' })}
+        ${Form.field('Nhận xét của nhân viên', 'nhan_xet', { type: 'textarea', value: kq?.nhan_xet || '' })}
+        <div class="field full"><label>Feedback của khách hàng</label>
+          ${fbs.map((f) => `<div class="alert" style="padding:8px 12px;margin-bottom:6px"><div><div class="ds">${esc(f.nguon_feedback)} · ${fmtDate(f.ngay_gui)}</div><div class="small">${esc(f.noi_dung)}</div></div></div>`).join('')}
+          <textarea class="textarea" name="feedback" placeholder="${fbs.length ? '+ Thêm feedback mới (không bắt buộc)' : 'Nhập feedback của khách hàng'}" style="min-height:64px"></textarea></div>
+        <div class="full callout small">${icon('info', 'sm')}<div><b>Đạt:</b> hồ sơ chuyển sang tab <b>Chờ ghi nhận</b> để ghi nhận offer. <b>Không đạt:</b> hồ sơ Bị loại. <b>Cần phỏng vấn thêm:</b> tạo lịch vòng tiếp theo.</div></div></form>` });
+    m.$$('#kq [data-v]').forEach((c) => (c.onclick = () => { m.$$('#kq [data-v]').forEach((x) => x.classList.remove('outline-primary')); c.classList.add('outline-primary'); m.$('[name=ket_qua]').value = c.dataset.v; }));
+    submitForm(m, (v) => {
+      const r = edit ? Svc.updateInterviewResult(lichId, v) : Svc.interviewResult(lichId, v);
+      if (r.ok) doneThen(m, edit ? 'Đã cập nhật kết quả phỏng vấn' : v.ket_qua === 'Không đạt' ? 'Đã lưu — hồ sơ chuyển “Bị loại”' : v.ket_qua === 'Đạt' ? 'Đã lưu — chuyển sang Chờ ghi nhận kết quả tuyển dụng' : 'Đã lưu — có thể tạo lịch vòng tiếp theo', then)(r);
+      return r;
+    });
+  },
+  /** Xem chi tiết phỏng vấn — chỉ xem (Quản lý, Ban Giám đốc) */
+  interviewDetail(lichId) {
+    const l = Store.get('lich_phong_van', lichId); const hs = Q.hs(l.ma_ho_so_ung_vien); const uv = Q.uv(hs.ma_ung_vien); const ct = Q.ct(hs.ma_chi_tiet_du_an); const kh = Q.khOfCt(ct);
+    const k = Q.kqPv(l.id); const fbs = Q.feedbacks(l.id); const ns = Q.ns(l.ma_nhan_su);
+    const ro = (label, val, full = false) => `<div class="field ${full ? 'full' : ''}"><label>${label}</label><div class="input" style="height:auto;min-height:40px;padding:9px 12px;background:var(--surface-2)">${val || '<span class="muted">—</span>'}</div></div>`;
+    modal({ size: 'lg', title: `Chi tiết phỏng vấn — ${esc(uv.ho_ten)}`, foot: '<button class="btn primary" data-close>Đóng</button>',
+      body: `<div class="callout mb">${icon('briefcase', 'sm')}<div><b>${esc(ct.vi_tri)}</b> · ${esc(kh.ten_cong_ty)} · ID vị trí ${Code.ct(ct.id)}<br>Vòng ${l.vong} · ${badge(l.trang_thai, 'sm')}</div></div>
+        <div class="form-grid">
+          ${ro('Ngày phỏng vấn', fmtDate(l.thoi_gian_bat_dau))}${ro('Thời gian', `${fmtTime(l.thoi_gian_bat_dau)} – ${fmtTime(l.thoi_gian_ket_thuc)}`)}
+          ${ro('Hình thức', esc(l.hinh_thuc))}${ro(l.hinh_thuc === 'Trực tuyến' ? 'Đường dẫn' : 'Địa điểm', l.hinh_thuc === 'Trực tuyến' ? `<a href="${esc(l.dia_diem_link)}" target="_blank" rel="noopener">${esc(l.dia_diem_link)}</a>` : esc(l.dia_diem_link))}
+          ${ro('Nhân viên phỏng vấn', `${esc(ns.ho_ten)} <span class="muted small">(${esc(Store.name('khu_vuc', ns.ma_khu_vuc))})</span>`, true)}
+          ${ro('Người tham gia — phía công ty', esc(l.nguoi_tham_gia_cong_ty || ''))}${ro('Người tham gia — phía khách hàng', esc(l.nguoi_tham_gia_khach_hang || ''))}
+          ${l.ly_do_huy ? ro('Lý do hủy', esc(l.ly_do_huy), true) : ''}
+          ${ro('Kết quả phỏng vấn', k ? badge(k.ket_qua) : '<span class="muted">Chưa ghi nhận</span>')}${ro('Điểm', k?.diem_danh_gia != null ? `<b>${k.diem_danh_gia}</b>/10` : '')}
+          ${ro('Nhận xét của nhân viên', esc(k?.nhan_xet || ''), true)}
+          ${ro('Feedback của khách hàng', fbs.map((f) => `<div>• ${esc(f.noi_dung)} <span class="muted small">(${fmtDate(f.ngay_gui)})</span></div>`).join(''), true)}
+        </div>` });
+  },
+  /** Gửi đề cử cho khách hàng — hiện thông tin khách hàng để xác nhận (Fix Demo lần 1) */
+  sendToClient(ids, then) {
+    const ds = ids.map((id) => Store.get('de_cu', id)).filter((d) => d.trang_thai === ST.DC.DUYET);
+    if (!ds.length) return toast('Chỉ gửi được đề cử ở trạng thái Chờ gửi (đã được Quản lý duyệt).', 'warn');
+    const byKh = groupBy(ds, (d) => Q.khOfCt(Q.ct(Q.hs(d.ma_ho_so_ung_vien).ma_chi_tiet_du_an)).id);
+    confirmBox({ title: 'Xác nhận gửi đề cử cho khách hàng', okText: `Xác nhận gửi (${ds.length})`,
+      message: Object.entries(byKh).map(([khId, list]) => { const k = Q.kh(khId); return `<div class="card card-pad mb" style="box-shadow:none">
+        <div class="strong">${esc(k.ten_cong_ty)}</div>
+        <dl class="kv mt-sm" style="grid-template-columns:110px 1fr"><dt>Người liên hệ</dt><dd>${esc(k.nguoi_lien_he)}</dd><dt>Email</dt><dd>${esc(k.email)}</dd><dt>Điện thoại</dt><dd>${esc(k.so_dien_thoai)}</dd><dt>Địa chỉ</dt><dd>${esc(k.dia_chi || '—')}</dd></dl>
+        <div class="small mt-sm"><b>Ứng viên gửi:</b> ${list.map((d) => { const hs = Q.hs(d.ma_ho_so_ung_vien); return `${esc(Q.uv(hs.ma_ung_vien).ho_ten)} (${esc(Q.ct(hs.ma_chi_tiet_du_an).vi_tri)}, ${esc(d.dot_de_cu)})`; }).join('; ')}</div></div>`; }).join('') + '<p class="small muted" style="margin:0">Đề cử chuyển “Đã gửi khách hàng” và chờ phản hồi.</p>',
+      onOk: () => { const r = Svc.sendToClient(ds.map((d) => d.id)); if (!r.ok) { toast(r.error, 'err'); return false; } toast(`Đã gửi ${r.sent} đề cử cho khách hàng`); then ? then() : UI.refresh(); } });
+  },
+  /** Ban Giám đốc góp ý đề cử → Quản lý nhận (mẫu "Góp ý về đề cử") */
+  comment(dcId, then) {
+    const d = Store.get('de_cu', dcId); const hs = Q.hs(d.ma_ho_so_ung_vien); const uv = Q.uv(hs.ma_ung_vien); const ct = Q.ct(hs.ma_chi_tiet_du_an);
+    const ro = (label, val) => `<div class="field"><label>${label}</label><div class="input" style="height:auto;min-height:40px;padding:9px 12px;background:var(--surface-2)">${val || '—'}</div></div>`;
+    const old = Q.comments(d.id);
+    const m = modal({ drawer: true, title: `Góp ý về đề cử <div class="small muted" style="font-weight:500">${Code.dc(d.id)} · ${esc(d.dot_de_cu)} · chỉ xem thông tin</div>`,
+      foot: '<button class="btn" data-close>Hủy bỏ</button><button class="btn primary" data-submit>' + icon('send', 'sm') + ' Gửi cho Quản lý</button>',
+      body: `<div class="alert mb"><div class="person" style="flex:1">${avatar(uv.ho_ten)}<div><div class="nm">${esc(uv.ho_ten)}</div><div class="sb">${Code.uv(uv.id)}</div></div></div><div style="text-align:right"><div class="muted small">KẾT QUẢ CỦA QUẢN LÝ</div>${badge(d.trang_thai === ST.DC.DUYET ? 'Đã duyệt' : d.trang_thai)}</div></div>
+        <form class="form-grid" novalidate>
+          <div class="full">${ro('Vị trí đề cử', `${Code.ct(ct.id)} · ${esc(ct.vi_tri)} — ${esc(Q.khOfCt(ct).ten_cong_ty)}`)}</div>
+          ${ro('Nhân viên đề cử', esc(Q.ns(d.ma_nguoi_tao)?.ho_ten))}${ro('Quản lý xử lý', d.ma_nguoi_duyet ? `${esc(Q.ns(d.ma_nguoi_duyet).ho_ten)} · ${fmtDT(d.ngay_duyet)}` : 'Chưa xử lý')}
+          ${ro('Kinh nghiệm', d.so_nam_kinh_nghiem != null ? d.so_nam_kinh_nghiem + ' năm' : '')}${ro('Mức lương mong muốn', fmtMoney(d.muc_luong_mong_muon))}
+          ${old.length ? `<div class="full field"><label>Góp ý trước đó</label>${old.map((g) => `<div class="ds">• ${esc(g.noi_dung)} <span class="muted">(${fmtDT(g.ngay_gop_y)} — ${esc(g.trang_thai)})</span></div>`).join('')}</div>` : ''}
+          <div class="field full"><label style="color:var(--amber)">Ý kiến của Ban Giám đốc <span class="req">*</span></label><textarea class="textarea" name="noi_dung" placeholder="Nhập góp ý gửi Quản lý…"></textarea>
+            <div class="hint">${icon('info', 'sm')} Quản lý sẽ nhận thông báo và thấy ghi chú này trên đề cử. Góp ý không làm thay đổi trạng thái đề cử.</div></div>
+        </form>` });
+    submitForm(m, (v) => { const r = Svc.addRecommendationComment(dcId, v.noi_dung); if (r.ok) doneThen(m, 'Đã gửi góp ý cho Quản lý', then)(r); return r; });
+  },
+  /** Thông tin vị trí (popup) — dùng ở Danh sách đề cử của Quản lý / BGĐ */
+  positionInfo(ctId) {
+    const c = Q.ct(ctId); const da = Q.da(c.ma_du_an); const kh = Q.kh(da.ma_khach_hang); const h = Q.hired(c.id);
+    modal({ size: 'lg', title: `${esc(c.vi_tri)} <span class="code">${Code.ct(c.id)}</span>`, foot: `<a class="btn" href="#/du-an/${c.id}">${icon('arrowRight', 'sm')} Mở trang vị trí</a><button class="btn primary" data-close>Đóng</button>`,
+      body: `<dl class="kv"><dt>Khách hàng</dt><dd>${esc(kh.ten_cong_ty)}</dd><dt>Dự án tuyển dụng</dt><dd>${esc(da.ten_du_an)} (${Code.da(da.id)})</dd><dt>Trạng thái</dt><dd>${badge(c.trang_thai)}</dd>
+        <dt>Cấp bậc · Chuyên môn</dt><dd>${esc(Store.name('cap_bac', c.ma_cap_bac))} · ${esc(Store.name('chuyen_mon', c.ma_chuyen_mon))}</dd><dt>Khu vực · Hình thức</dt><dd>${esc(Store.name('khu_vuc', c.ma_khu_vuc))} · ${esc(c.hinh_thuc)}</dd>
+        <dt>Số lượng · Đã nhận việc</dt><dd>${c.so_luong} · ${h}</dd><dt>Mức lương tối đa</dt><dd>${fmtMoney(c.muc_luong_toi_da)}</dd><dt>Tiếp nhận → Hạn</dt><dd>${fmtDate(c.ngay_tao)} → ${fmtDate(c.han_hoan_thanh)}</dd>
+        <dt>Nhân sự phụ trách</dt><dd>${Q.assignees(c.id).map((n) => esc(n.ho_ten)).join(', ') || '—'}</dd><dt>Mô tả công việc</dt><dd>${esc(c.mo_ta_cong_viec || '—')}</dd></dl>` });
+  },
+  /** Đề cử trực tiếp từ hồ sơ ứng viên: gõ tên vị trí (chỉ vị trí được phân công) → Lưu (Fix Demo lần 1) */
+  recommendOne(uvId) {
+    const u = Q.uv(uvId);
+    const cts = Q.visibleCts().filter((c) => c.trang_thai === ST.CT.DANG && Q.assignees(c.id).some((n) => n.id === Auth.user.id));
+    if (!cts.length) return toast('Bạn chưa được phân công vị trí nào đang thực hiện.', 'warn');
+    const items = cts.map((c) => { const hs = DB.ho_so_ung_tuyen.find((h) => h.ma_ung_vien === u.id && h.ma_chi_tiet_du_an === c.id); return { id: c.id, label: `${c.vi_tri} — ${Q.khOfCt(c).ten_cong_ty}`, sub: `${Code.ct(c.id)} · ${hs ? 'Đã có hồ sơ: ' + hs.trang_thai : 'Chưa apply — hệ thống tạo hồ sơ ứng tuyển'}`, search: `${c.vi_tri} ${Code.ct(c.id)} ${Q.khOfCt(c).ten_cong_ty}` }; });
+    const m = modal({ title: `Đề cử ${esc(u.ho_ten)} vào vị trí`, foot: foot('Lưu'),
       body: `<form class="form-grid" novalidate>
-        <div class="field full"><label>Kết quả <span class="req">*</span></label><div class="chip-group" id="kq">${['Đạt', 'Không đạt', 'Cần phỏng vấn thêm'].map((t) => `<button type="button" class="chip" data-v="${t}">${t}</button>`).join('')}</div><input type="hidden" name="ket_qua"></div>
-        ${Form.field('Điểm đánh giá (0–10)', 'diem_danh_gia', { type: 'number', attrs: 'min="0" max="10" step="0.1"' })}
-        <div></div>
-        ${Form.field('Nhận xét của Navigos', 'nhan_xet', { type: 'textarea', full: true })}
-        ${Form.field('Feedback của khách hàng', 'feedback', { type: 'textarea', full: true, ph: 'Có thể bổ sung thêm feedback sau' })}</form>` });
-    m.$$('#kq .chip').forEach((c) => (c.onclick = () => { m.$$('#kq .chip').forEach((x) => x.classList.remove('active')); c.classList.add('active'); m.$('[name=ket_qua]').value = c.dataset.v; }));
-    submitForm(m, (v) => { const r = Svc.interviewResult(lichId, v); if (r.ok) doneThen(m, v.ket_qua === 'Không đạt' ? 'Đã lưu — hồ sơ chuyển “Bị loại”' : v.ket_qua === 'Đạt' ? 'Đã lưu — chờ kết quả tuyển dụng từ khách hàng' : 'Đã lưu — có thể tạo lịch vòng tiếp theo', then)(r); return r; });
+        <div class="field full ta"><label>Vị trí (được phân công) <span class="req">*</span></label><input class="input" name="ct_text" placeholder="Gõ tên vị trí, ID vị trí hoặc khách hàng…" autocomplete="off"><input type="hidden" name="ct"><div class="hint" id="ctHint">${cts.length} vị trí bạn đang phụ trách</div></div>
+        ${Form.field('Đợt đề cử', 'dot_de_cu', { req: true, value: 'Đợt 1' })}
+        ${Form.field('Số năm kinh nghiệm', 'exp', { type: 'number', value: u.so_nam_kinh_nghiem ?? '', attrs: 'step="0.5" min="0"' })}
+        ${Form.field('Lương mong muốn (VND)', 'salary', { type: 'number', ph: 'VD: 30000000' })}
+        ${Form.field('Notice period', 'notice', { value: '30 ngày' })}
+        ${Form.field('Ghi chú gửi Quản lý', 'ghi_chu', { type: 'textarea', full: true, ph: 'Lý do đề cử, điểm mạnh của ứng viên… (Quản lý đọc khi duyệt)' })}</form>` });
+    const f = m.$('form');
+    Comp.typeahead(f.ct_text, items, (it) => {
+      f.ct.value = it ? it.id : '';
+      if (it) { const used = new Set(DB.de_cu.filter((d) => Q.hs(d.ma_ho_so_ung_vien).ma_chi_tiet_du_an === it.id).map((d) => d.dot_de_cu)); f.dot_de_cu.value = 'Đợt ' + Math.max(1, used.size); m.$('#ctHint').textContent = it.sub; }
+    });
+    submitForm(m, (v) => {
+      if (!v.ct) return { ok: false, errors: { ct_text: 'Gõ và chọn một vị trí trong danh sách gợi ý.' } };
+      const r = Svc.createRecommendations(Number(v.ct), [u.id], { dot_de_cu: v.dot_de_cu, ghi_chu: v.ghi_chu, per: { [u.id]: { exp: v.exp === '' ? null : Number(v.exp), salary: v.salary, notice: v.notice } } });
+      if (r.errors) return r;
+      if (!r.ok) return { ok: false, error: (r.skipped || []).join('; ') || r.error };
+      m.close(); toast(`Đã tạo đề cử cho ${esc(u.ho_ten)} — chờ Quản lý duyệt`); Pages.recommendations.tab = 'cho-duyet'; Router.go('#/de-cu');
+      return { ok: true };
+    });
+  },
+  /** Chọn hồ sơ để lên lịch phỏng vấn — gõ tên ứng viên, hiện gợi ý (Fix Demo lần 1) */
+  pickHsForInterview(ready) {
+    const items = ready.map((h) => { const u = Q.uv(h.ma_ung_vien); const c = Q.ct(h.ma_chi_tiet_du_an); return { id: h.id, label: u.ho_ten, sub: `${c.vi_tri} — ${Q.khOfCt(c).ten_cong_ty} · ${Code.ct(c.id)} · ${h.trang_thai === ST.HS.PV ? 'Cần phỏng vấn thêm' : 'KH đồng ý phỏng vấn'}`, search: `${u.ho_ten} ${c.vi_tri} ${Code.ct(c.id)}` }; });
+    const m = modal({ size: 'sm', title: 'Chọn hồ sơ để lên lịch', foot: foot('Tiếp tục'),
+      body: `<form novalidate><div class="field ta"><label>Ứng viên <span class="req">*</span></label><input class="input" name="hs_text" placeholder="Nhập tên ứng viên…" autocomplete="off"><input type="hidden" name="hs"></div>
+        <p class="muted small">Chỉ hiển thị hồ sơ khách hàng đã đồng ý phỏng vấn hoặc cần phỏng vấn thêm (${ready.length} hồ sơ).</p></form>` });
+    const f = m.$('form'); Comp.typeahead(f.hs_text, items, (it) => (f.hs.value = it ? it.id : ''));
+    submitForm(m, (x) => { if (!x.hs) return { ok: false, errors: { hs_text: 'Gõ tên và chọn ứng viên trong danh sách gợi ý.' } }; m.close(); Dlg.interview(Number(x.hs)); return { ok: true }; });
   },
   /* ----- Kết quả tuyển dụng (UC_09) ----- */
   hiring(hsId, then) {

@@ -133,7 +133,7 @@ const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hi
 const DB_KEY = 'navigos_talent_db_v3';
 const TABLES = ['khu_vuc', 'linh_vuc', 'cap_bac', 'chuyen_mon', 'nhan_su', 'khach_hang', 'du_an_tuyen_dung', 'chi_tiet_du_an',
   'kenh_dang_tuyen', 'tin_dang', 'phan_cong', 'ung_vien', 'ho_so_ung_tuyen', 'lich_su_trang_thai', 'de_cu', 'lich_phong_van',
-  'ket_qua_phong_van', 'feedback', 'ket_qua_tuyen_dung', 'quy_tac_xep_lich'];
+  'ket_qua_phong_van', 'feedback', 'ket_qua_tuyen_dung', 'quy_tac_xep_lich', 'gop_y_de_cu'];
 
 const Store = {
   db: null,
@@ -177,9 +177,12 @@ const Auth = {
   logout() { this.user = null; try { sessionStorage.removeItem('navigos_uid'); } catch (e) { /* bỏ qua */ } location.hash = '#/login'; },
   role() { return this.user?.vai_tro; },
   isAdmin() { return this.role() === ROLES.ADMIN; },
-  isLead() { return [ROLES.BGD, ROLES.QL].includes(this.role()); },
+  isLead() { return [ROLES.BGD, ROLES.QL].includes(this.role()); }, // xem toàn bộ dự án
+  isQL() { return this.role() === ROLES.QL; },   // phân công, duyệt đề cử, nhận góp ý
+  isBGD() { return this.role() === ROLES.BGD; }, // chỉ xem, góp ý đề cử, báo cáo
   isStaff() { return this.role() === ROLES.NV; },
-  canWork() { return this.isLead() || this.isStaff(); }, // nghiệp vụ tuyển dụng
+  canOperate() { return this.isStaff(); },       // thao tác nghiệp vụ (bảng phân quyền — Fix Demo lần 1)
+  canWork() { return this.isLead() || this.isStaff(); }, // xem nghiệp vụ tuyển dụng
 };
 
 /* ---------- Router ---------- */
@@ -253,17 +256,17 @@ const UI = {
     let nav = item('#/', 'home', 'Trang chủ');
     if (Auth.canWork()) {
       nav += `<div class="nav-label">Nghiệp vụ tuyển dụng</div>`;
-      nav += item('#/du-an', 'briefcase', 'Dự án tuyển dụng', Auth.isLead() ? c.choPhanCong : 0);
-      nav += item('#/ung-vien', 'users', 'Kho ứng viên', c.chuaChuanHoa);
-      nav += item('#/thu-thap', 'inbox', 'Thu thập hồ sơ', c.choGan);
-      nav += item('#/de-cu', 'send', 'Đề cử ứng viên', Auth.isLead() ? c.choDuyet : c.canSua);
+      nav += item('#/du-an', 'briefcase', 'Dự án tuyển dụng', Auth.isQL() ? c.choPhanCong : 0);
+      nav += item('#/ung-vien', 'users', 'Danh sách ứng viên', Auth.canOperate() ? c.chuaChuanHoa : 0);
+      if (!Auth.isBGD()) nav += item('#/thu-thap', 'inbox', 'Thu thập hồ sơ', Auth.canOperate() ? c.choGan : 0);
+      nav += item('#/de-cu', 'send', 'Danh sách đề cử', Auth.isQL() ? c.choDuyet + c.gopYMoi : Auth.isStaff() ? c.canSua : 0);
       nav += item('#/phong-van', 'calendar', 'Quản lý phỏng vấn', c.pvHomNay);
       nav += item('#/ket-qua', 'checkCircle', 'Kết quả tuyển dụng');
-      nav += item('#/khach-hang', 'building', 'Khách hàng');
+      nav += item('#/khach-hang', 'building', 'Danh sách khách hàng');
     }
-    if (Auth.isLead()) { nav += `<div class="nav-label">Quản lý</div>` + item('#/bao-cao', 'chart', 'Báo cáo - Thống kê') + item('#/nhan-su', 'idcard', 'Nhân sự') + item('#/quy-tac-lich', 'clock', 'Quy tắc xếp lịch PV'); }
+    if (Auth.isLead()) { nav += `<div class="nav-label">Quản lý</div>` + item('#/bao-cao', 'chart', 'Báo cáo - Thống kê') + item('#/nhan-su', 'idcard', 'Nhân sự') + (Auth.isQL() ? item('#/quy-tac-lich', 'clock', 'Quy tắc xếp lịch PV') : ''); }
     if (Auth.isAdmin()) { nav += `<div class="nav-label">Quản trị hệ thống</div>` + item('#/tai-khoan', 'shield', 'Tài khoản & phân quyền') + item('#/danh-muc', 'layers', 'Danh mục dùng chung') + item('#/quy-tac-lich', 'clock', 'Quy tắc xếp lịch PV'); }
-    $('#sidebar').innerHTML = `<a class="brand" href="#/"><img src="assets/logo.png" alt="Navigos Group"></a>
+    $('#sidebar').innerHTML = `<a class="brand" href="#/"><img src="assets/logo-white.png" alt="Navigos Group"></a>
       <nav class="nav">${nav}</nav>
       <div class="sidebar-foot"><a href="#/cai-dat">${icon('settings')}<span>Cài đặt</span></a><a href="#" class="danger" id="logoutBtn">${icon('logout')}<span>Đăng xuất</span></a></div>`;
     $('#logoutBtn').onclick = (e) => { e.preventDefault(); Auth.logout(); };

@@ -30,6 +30,7 @@ const MAP = {
   feedback: { sql: 'FEEDBACK', pk: 'ma_feedback' },
   ket_qua_tuyen_dung: { sql: 'KET_QUA_TUYEN_DUNG', pk: 'ma_ket_qua_td' },
   quy_tac_xep_lich: { sql: 'QUY_TAC_XEP_LICH', pk: 'ma_quy_tac' },
+  gop_y_de_cu: { sql: 'GOP_Y_DE_CU', pk: 'ma_gop_y' },
 };
 const ORDER = Object.keys(MAP); // thứ tự cha → con (đảm bảo khóa ngoại khi INSERT)
 const LOG_COLS = ['thoi_diem', 'nguoi', 'kenh', 'url', 'tong', 'moi', 'trung', 'gan', 'cho_gan', 'bo_qua'];
@@ -84,6 +85,27 @@ class Repository {
       await c.query(ddl);
       await c.query('INSERT INTO QUY_TAC_XEP_LICH (ngay_cap_nhat) VALUES (UTC_TIMESTAMP(3))');
       console.log('• Migration: tạo bảng QUY_TAC_XEP_LICH (BR10-6)');
+    }
+    // 3) Fix Demo lần 1: bảng góp ý đề cử của Ban Giám đốc
+    const has = async (tbl) => (await c.query("SELECT COUNT(*) n FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND UPPER(TABLE_NAME) = ?", [db, tbl]))[0][0].n > 0;
+    const hasCol = async (tbl, col) => (await c.query("SELECT COUNT(*) n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND UPPER(TABLE_NAME) = ? AND COLUMN_NAME = ?", [db, tbl, col]))[0][0].n > 0;
+    if (!(await has('GOP_Y_DE_CU'))) {
+      await c.query(fs.readFileSync(path.join(this.cfg.ROOT, 'database', 'schema.sql'), 'utf8').match(/CREATE TABLE GOP_Y_DE_CU[\s\S]*?ENGINE=InnoDB;/)[0]);
+      console.log('• Migration: tạo bảng GOP_Y_DE_CU');
+    }
+    // 4) Lịch phỏng vấn: người tham gia tách phía công ty / khách hàng, lý do hủy riêng
+    if (!(await hasCol('LICH_PHONG_VAN', 'nguoi_tham_gia_cong_ty'))) {
+      await c.query("ALTER TABLE LICH_PHONG_VAN ADD COLUMN nguoi_tham_gia_cong_ty VARCHAR(500) NULL AFTER nguoi_tham_gia, ADD COLUMN nguoi_tham_gia_khach_hang VARCHAR(500) NULL AFTER nguoi_tham_gia_cong_ty, ADD COLUMN ly_do_huy VARCHAR(500) NULL AFTER nguoi_tham_gia_khach_hang");
+      await c.query("UPDATE LICH_PHONG_VAN SET ly_do_huy = TRIM(SUBSTRING_INDEX(nguoi_tham_gia, 'Lý do hủy:', -1)), nguoi_tham_gia = TRIM(SUBSTRING_INDEX(nguoi_tham_gia, ' | Lý do hủy:', 1)) WHERE nguoi_tham_gia LIKE '%Lý do hủy:%'");
+      await c.query("UPDATE LICH_PHONG_VAN SET nguoi_tham_gia_cong_ty = TRIM(SUBSTRING_INDEX(nguoi_tham_gia, ', ', 1)), nguoi_tham_gia_khach_hang = NULLIF(TRIM(SUBSTRING(nguoi_tham_gia, LENGTH(SUBSTRING_INDEX(nguoi_tham_gia, ', ', 1)) + 3)), '')");
+      console.log('• Migration: LICH_PHONG_VAN thêm người tham gia công ty / khách hàng, lý do hủy');
+    }
+    // 5) Kênh đăng tuyển: bỏ TopCV, thay bằng "Khác"
+    const [[tc]] = await c.query("SELECT COUNT(*) n FROM KENH_DANG_TUYEN WHERE ten_kenh = 'TopCV'");
+    if (tc.n) {
+      await c.query("UPDATE KENH_DANG_TUYEN SET ten_kenh = 'Khác', ten_mien = NULL, mo_ta = 'Nguồn khác: email ứng tuyển, giới thiệu, sự kiện tuyển dụng… (gắn mã tin nội bộ)' WHERE ten_kenh = 'TopCV'");
+      await c.query("UPDATE UNG_VIEN SET nguon = 'Khác' WHERE nguon = 'TopCV'");
+      console.log('• Migration: kênh TopCV → Khác');
     }
   }
 

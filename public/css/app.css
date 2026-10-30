@@ -452,3 +452,62 @@ table.table { width: 100%; border-collapse: collapse; }
   .print-only { display: block !important; }
 }
 .print-only { display: none; }
+
+/* ==========================================================
+   Fix Demo lần 1 — thanh menu xanh đậm, bỏ mô tả, STT, ô gợi ý
+   ========================================================== */
+.sidebar { background: linear-gradient(180deg, #13205a 0%, #172a6e 100%); border-right: 0; color: #c9d3f2; }
+.sidebar .brand img { height: 44px; }
+.nav-label { color: rgba(201, 211, 242, .55); }
+.nav a { color: #c9d3f2; }
+.nav a:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.nav a.active { background: rgba(255, 255, 255, .14); color: #fff; box-shadow: inset 3px 0 0 #22b4e6; }
+.nav a .count { background: #e5383b; }
+.sidebar-foot { border-top-color: rgba(255, 255, 255, .12); }
+.sidebar-foot a { color: #c9d3f2; }
+.sidebar-foot a:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.sidebar-foot a.danger { color: #ff8b8d; }
+.nav::-webkit-scrollbar { width: 6px; } .nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 6px; }
+/* Bỏ dòng mô tả dưới tiêu đề ở tất cả các màn (giữ lại dòng thông tin có class "sub") */
+.page-head > div > p:not(.sub) { display: none; }
+/* Cột STT */
+.table th.stt, .table td.stt { width: 52px; text-align: center; color: var(--text-2); font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) { table.table.responsive td.stt { display: none; } }
+/* Ô nhập có gợi ý (typeahead) */
+.ta { position: relative; }
+.ta-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 120; background: #fff; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); max-height: 260px; overflow-y: auto; }
+.ta-item { padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.ta-item:last-child { border-bottom: 0; }
+.ta-item:hover, .ta-item.on { background: var(--primary-50); }
+.ta-item .t { font-weight: 600; font-size: 13px; } .ta-item .s { font-size: 12px; color: var(--muted); }
+.ta-picked { margin-top: 8px; }
+/* Báo cáo theo mẫu */
+.rp-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid #c8d1e3; }
+.rp-kpis > div { padding: 12px 14px; border-right: 1px solid #c8d1e3; } .rp-kpis > div:last-child { border-right: 0; }
+.rp-kpis .l { font-size: 12px; color: var(--text-2); } .rp-kpis .v { font-size: 24px; font-weight: 800; margin-top: 6px; }
+@media (max-width: 720px) { .rp-kpis { grid-template-columns: 1fr 1fr; } .rp-kpis > div:nth-child(2) { border-right: 0; } .rp-kpis > div:nth-child(-n+2) { border-bottom: 1px solid #c8d1e3; } }
+.rp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rp-table th { background: #eef2fb; color: #1d2766; border: 1px solid #c8d1e3; padding: 9px 8px; font-weight: 700; text-align: center; }
+.rp-table td { border: 1px solid #c8d1e3; padding: 8px; }
+.rp-table td.c { text-align: center; } .rp-table tr.total td { background: #eef2fb; font-weight: 700; }
+.rp-sec { font-size: 14px; font-weight: 800; color: #1d2766; text-transform: uppercase; margin: 18px 0 8px; }
+/* Khung báo cáo chính thức (màn hình + in PDF) */
+.rp-doc { padding: 34px 40px; max-width: 1040px; margin: 0 auto; color: #1f2a44; }
+.rp-top { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; padding-bottom: 14px; border-bottom: 3px double #1d2766; }
+.rp-brand { display: flex; gap: 12px; align-items: center; }
+.rp-logo { width: 44px; height: 44px; border-radius: 10px; background: #0a6cff; color: #fff; font-weight: 800; font-size: 24px; display: grid; place-items: center; flex: none; }
+.rp-co { font-weight: 800; color: #1d2766; font-size: 16px; }
+.rp-code { text-align: right; font-size: 13px; color: var(--text-2); line-height: 1.7; } .rp-code b { color: #1f2a44; }
+.rp-title { text-align: center; color: #1d2766; font-size: 22px; font-weight: 800; margin: 26px 0 6px; }
+.rp-period { text-align: center; color: var(--text-2); margin-bottom: 20px; }
+.rp-meta { display: grid; grid-template-columns: 120px 1fr 150px 1fr; gap: 8px 12px; margin: 0 0 6px; font-size: 14px; }
+.rp-meta dt { color: var(--muted); } .rp-meta dd { margin: 0; font-weight: 600; }
+.rp-table .t-sub { font-size: 11px; color: var(--muted); }
+.rp-notes { margin-top: 16px; font-size: 13px; } .rp-notes ul { margin: 6px 0 0; padding-left: 20px; color: var(--text-2); }
+.rp-date { text-align: right; font-style: italic; margin-top: 22px; }
+.rp-sign { display: grid; grid-template-columns: 1fr 1fr; text-align: center; margin-top: 12px; min-height: 150px; }
+.rp-sign b { display: block; } .rp-sign i { display: block; font-size: 12px; color: var(--muted); margin-bottom: 64px; } .rp-sign .nm { font-weight: 700; }
+.rp-foot { border-top: 1px solid #c8d1e3; margin-top: 26px; padding-top: 8px; font-size: 12px; color: var(--muted); }
+@media (max-width: 720px) { .rp-doc { padding: 20px 16px; } .rp-top { flex-direction: column; } .rp-code { text-align: left; } .rp-meta { grid-template-columns: 110px 1fr; } .rp-title { font-size: 18px; } }
+@media print { .rp-doc { border: 0; padding: 0; max-width: none; } .rp-table th, .rp-table tr.total td { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .rp-logo { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+[hidden] { display: none !important; }
