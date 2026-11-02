@@ -11,13 +11,18 @@ const ctOpts = (filter = (c) => c.trang_thai === ST.CT.DANG) => [['', '— Chọ
 Pages.login = {
   render(root) {
     if (Auth.user) return Router.go('#/');
-    const demo = [['admin', 'Quản trị viên', 'Tài khoản & phân quyền'], ['giamdoc', 'Ban Giám đốc', 'Báo cáo, phân công, duyệt'], ['quanly', 'Quản lý', 'Phân công, duyệt đề cử'], ['nhanvien', 'Nhân viên', 'Xử lý hồ sơ, đề cử, phỏng vấn']];
+    const demo = [['admin', 'Quản trị viên', 'Tài khoản & phân quyền'], ['giamdoc', 'Ban Giám đốc', 'Xem, góp ý đề cử, báo cáo'], ['quanly', 'Quản lý', 'Phân công, duyệt đề cử'], ['nhanvien', 'Nhân viên', 'Xử lý hồ sơ, đề cử, phỏng vấn']];
     root.innerHTML = `<div class="login-page">
       <section class="login-art">
-        <img class="mark" src="assets/mark.png" alt="">
-        <div><h2>Kết nối đúng người, đúng việc — quản lý trọn vòng đời dự án tuyển dụng.</h2>
-          <p class="mt">Hệ thống quản lý dự án tuyển dụng cho Navigos Search: từ tiếp nhận yêu cầu của khách hàng, thu thập hồ sơ tự động, đề cử – phỏng vấn đến ghi nhận kết quả và báo cáo.</p></div>
-        <div class="flow"><span>Tiếp nhận yêu cầu</span><span>Phân công</span><span>Thu thập hồ sơ</span><span>Lọc & đề cử</span><span>Duyệt nội bộ</span><span>Phỏng vấn</span><span>Kết quả</span><span>Báo cáo</span></div>
+        <img class="brand-logo" src="assets/logo-white.png" alt="Navigos Group">
+        <div class="hero">
+          <span class="eyebrow">Navigos Group Việt Nam · Talent Suite</span>
+          <h2>Kết nối đúng người,<br>đúng việc.</h2>
+          <p>Nền tảng nội bộ của Navigos Group quản lý trọn vòng đời dự án tuyển dụng — từ yêu cầu của khách hàng đến ngày ứng viên nhận việc.</p>
+        </div>
+        <div class="steps">
+          ${[['briefcase', 'Tiếp nhận & phân công', 'Yêu cầu khách hàng thành vị trí, giao đúng người phụ trách'], ['users', 'Hồ sơ & đề cử', 'Thu thập, chuẩn hóa, lọc và duyệt đề cử nội bộ'], ['calendar', 'Phỏng vấn & kết quả', 'Xếp lịch không trùng, ghi nhận kết quả, theo dõi nhận việc'], ['chart', 'Báo cáo', 'Tiến độ, trễ hạn, tỷ lệ chuyển đổi và hiệu suất']].map(([ic, t, d], i) => `<div class="step"><span class="n">0${i + 1}</span><div><b>${icon(ic, 'sm')} ${t}</b><span>${d}</span></div></div>`).join('')}
+        </div>
       </section>
       <section class="login-box"><div class="card login-card">
         <img class="logo" src="assets/logo.png" alt="Navigos Group">
@@ -134,14 +139,16 @@ Pages.projects = {
     const cts = Q.visibleCts(); const choPc = DB.chi_tiet_du_an.filter((c) => c.trang_thai === ST.CT.MOI);
     v.innerHTML = `<div class="page-head"><div><h1>Dự án tuyển dụng</h1><p>Mỗi dự án tuyển dụng của khách hàng gồm một hoặc nhiều vị trí (chi tiết dự án) — theo dõi tiến độ & thời hạn.</p></div>
       <div class="actions"><button class="btn" id="xls">${icon('download', 'sm')} Xuất Excel</button>${Auth.canOperate() ? `<button class="btn" id="newDa">${icon('briefcase', 'sm')} Tạo dự án tuyển dụng</button><button class="btn primary" id="newCt">${icon('plus', 'sm')} Tiếp nhận yêu cầu (thêm vị trí)</button>` : ''}</div></div>
-      <div class="grid g-4 kpis mb">
-        ${[['Tổng vị trí', cts.length, '', ''], ['Đang thực hiện', cts.filter((c) => c.trang_thai === ST.CT.DANG).length, 'tone-blue', ST.CT.DANG], ['Sắp hết hạn / quá hạn', cts.filter((c) => Q.deadline(c)).length, 'tone-red', 'canh-bao'], ['Hoàn thành', cts.filter((c) => c.trang_thai === ST.CT.XONG).length, 'tone-green', ST.CT.XONG]]
-          .map(([l, n, t, st]) => `<div class="card kpi clickable" data-st="${st}"><div><div class="label">${l}</div><div class="value">${pad(n)}</div></div>${t ? `<div class="ico ${t}">${icon(t === 'tone-red' ? 'clock' : t === 'tone-green' ? 'checkCircle' : 'briefcase')}</div>` : ''}</div>`).join('')}
+      <div class="grid g-5 kpis mb">
+        <div class="card kpi clickable" data-totab="du-an"><div><div class="label">Tổng dự án</div><div class="value">${pad(this.visibleDas().length)}</div></div><div class="ico tone-violet">${icon('layers')}</div></div>
+        ${[['Tổng vị trí', cts.length, 'tone-sky', ''], ['Đang thực hiện', cts.filter((c) => c.trang_thai === ST.CT.DANG).length, 'tone-blue', ST.CT.DANG], ['Sắp hết hạn / quá hạn', cts.filter((c) => Q.deadline(c)).length, 'tone-red', 'canh-bao'], ['Hoàn thành', cts.filter((c) => c.trang_thai === ST.CT.XONG).length, 'tone-green', ST.CT.XONG]]
+          .map(([l, n, t, st]) => `<div class="card kpi clickable" data-st="${st}"><div><div class="label">${l}</div><div class="value">${pad(n)}</div></div><div class="ico ${t}">${icon(t === 'tone-red' ? 'clock' : t === 'tone-green' ? 'checkCircle' : t === 'tone-sky' ? 'idcard' : 'briefcase')}</div></div>`).join('')}
       </div>
       <div class="tabs">${[['vi-tri', 'Vị trí tuyển dụng'], ['du-an', 'Dự án tuyển dụng'], ...(Auth.isQL() ? [['phan-cong', `Chờ phân công (${choPc.length})`]] : [])].map(([k, l]) => `<button data-tab="${k}" class="${s.tab === k ? 'active' : ''}">${l}</button>`).join('')}</div>
       <div id="tabBody"></div>`;
     $$('[data-tab]', v).forEach((b) => (b.onclick = () => { s.tab = b.dataset.tab; s.page = 1; UI.refresh(); }));
     $$('[data-st]', v).forEach((b) => (b.onclick = () => { s.tab = 'vi-tri'; s.st = b.dataset.st; s.page = 1; UI.refresh(); }));
+    $$('[data-totab]', v).forEach((b) => (b.onclick = () => { s.tab = b.dataset.totab; UI.refresh(); }));
     $('#newCt') && ($('#newCt').onclick = () => Dlg.position());
     $('#newDa') && ($('#newDa').onclick = () => Dlg.project());
     const body = $('#tabBody');
@@ -201,16 +208,21 @@ Pages.projects = {
     $('#xls').onclick = () => Export.excel('DanhSachViTri_' + todayStr(), 'Danh sách vị trí tuyển dụng', ['ID', 'Vị trí', 'Khách hàng', 'Dự án tuyển dụng', 'Cấp bậc', 'Khu vực', 'Số lượng', 'Đã nhận việc', 'Hạn', 'Trạng thái', 'Phụ trách'],
       this._rows.map((c) => [Code.ct(c.id), c.vi_tri, Q.khOfCt(c).ten_cong_ty, Q.da(c.ma_du_an).ten_du_an, Store.name('cap_bac', c.ma_cap_bac), Store.name('khu_vuc', c.ma_khu_vuc), c.so_luong, Q.hired(c.id), fmtDate(c.han_hoan_thanh), c.trang_thai, Q.assignees(c.id).map((n) => n.ho_ten).join(', ')]));
   },
-  parents(body) {
+  /** Dự án tuyển dụng người dùng được xem (Quản lý / BGĐ: tất cả; Nhân viên: có vị trí tự tạo / được phân công) */
+  visibleDas() {
     const visible = new Set(Q.visibleCts().map((c) => c.ma_du_an));
-    const das = DB.du_an_tuyen_dung.filter((d) => Auth.isLead() || visible.has(d.id)).sort((a, b) => b.ngay_tao.localeCompare(a.ngay_tao));
-    body.innerHTML = `<div class="card"><div class="table-wrap"><table class="table responsive"><thead><tr><th>Dự án tuyển dụng</th><th>Khách hàng</th><th>Bắt đầu</th><th class="num">Vị trí</th><th class="num">Cần tuyển</th><th>Tiến độ (BR4-5)</th><th>Trạng thái</th></tr></thead><tbody>
-      ${das.map((d) => { const cts = DB.chi_tiet_du_an.filter((c) => c.ma_du_an === d.id); return `<tr class="clickable" data-da="${d.id}">
-        <td class="cell-main" data-label=""><div class="t-title">${esc(d.ten_du_an)}</div><div class="t-sub">${Code.da(d.id)} · ${esc(d.ghi_chu || '')}</div></td>
+    return DB.du_an_tuyen_dung.filter((d) => Auth.isLead() || visible.has(d.id));
+  },
+  parents(body) {
+    const das = this.visibleDas().sort((a, b) => b.ngay_tao.localeCompare(a.ngay_tao));
+    body.innerHTML = `<div class="card"><div class="table-wrap"><table class="table responsive"><thead><tr><th class="stt">STT</th><th>Dự án tuyển dụng</th><th>Khách hàng</th><th>Bắt đầu</th><th class="num">Vị trí</th><th class="num">Cần tuyển</th><th>Tiến độ (BR4-5)</th><th>Trạng thái</th></tr></thead><tbody>
+      ${das.map((d, i) => { const cts = DB.chi_tiet_du_an.filter((c) => c.ma_du_an === d.id); return `<tr class="clickable" data-da="${d.id}">
+        <td class="stt">${i + 1}</td>
+        <td class="cell-main" data-label=""><div class="t-title">${esc(d.ten_du_an)}</div><div class="t-sub">${[Code.da(d.id), d.ghi_chu].filter(Boolean).map(esc).join(' · ')}</div></td>
         <td data-label="Khách hàng">${esc(Q.kh(d.ma_khach_hang).ten_cong_ty)}</td><td data-label="Bắt đầu">${fmtDate(d.ngay_bat_dau)}</td>
         <td data-label="Vị trí" class="num">${cts.length}</td><td data-label="Cần tuyển" class="num">${sum(cts.filter((c) => c.trang_thai !== ST.CT.HUY).map((c) => c.so_luong))}</td>
         <td data-label="Tiến độ" style="min-width:140px"><div class="prog-meta"><span>${d.tien_do}%</span></div>${progressBar(d.tien_do, d.tien_do >= 100 ? 'green' : '')}</td>
-        <td data-label="Trạng thái">${badge(d.trang_thai)}</td></tr>`; }).join('') || `<tr><td colspan="7">${emptyState('Chưa có dự án tuyển dụng')}</td></tr>`}
+        <td data-label="Trạng thái">${badge(d.trang_thai)}</td></tr>`; }).join('') || `<tr><td colspan="8">${emptyState('Chưa có dự án tuyển dụng')}</td></tr>`}
       </tbody></table></div></div>`;
     $$('[data-da]', body).forEach((tr) => (tr.onclick = () => Dlg.parentDetail(Number(tr.dataset.da))));
   },

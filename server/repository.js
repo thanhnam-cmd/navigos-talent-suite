@@ -107,6 +107,11 @@ class Repository {
       await c.query("UPDATE UNG_VIEN SET nguon = 'Khác' WHERE nguon = 'TopCV'");
       console.log('• Migration: kênh TopCV → Khác');
     }
+    // 6) Test demo lần 2: lịch phỏng vấn bổ sung theo yêu cầu khách hàng — lưu nội dung yêu cầu
+    if (!(await hasCol('LICH_PHONG_VAN', 'ghi_chu'))) {
+      await c.query("ALTER TABLE LICH_PHONG_VAN ADD COLUMN ghi_chu VARCHAR(500) NULL COMMENT 'Yêu cầu phỏng vấn bổ sung của khách hàng' AFTER ly_do_huy");
+      console.log('• Migration: LICH_PHONG_VAN thêm ghi_chu (phỏng vấn bổ sung)');
+    }
   }
 
   async connect() {

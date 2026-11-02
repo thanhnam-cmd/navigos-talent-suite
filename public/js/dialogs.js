@@ -107,11 +107,11 @@ const Dlg = {
     const staffOpts = [...asg.map((n) => [n.id, optLabel(n, ' · phụ trách dự án')]), ...others.map((n) => [n.id, optLabel(n, n.ma_khu_vuc === ct.ma_khu_vuc ? ' · cùng khu vực' : '')])];
     const def = l ? new Date(l.thoi_gian_bat_dau) : (() => { const d = new Date(now()); d.setDate(d.getDate() + 1); if ([0, 6].includes(d.getDay())) d.setDate(d.getDate() + (d.getDay() === 6 ? 2 : 1)); d.setHours(9, 0, 0, 0); return d; })();
     const defEnd = l ? new Date(l.thoi_gian_ket_thuc) : new Date(def.getTime() + 3600000);
-    const R = Q.rules();
+    const R = Q.rules(); const extra = !l && Q.extraRoundReason(hs);
     const m = modal({ size: 'lg', title: l ? 'Cập nhật lịch phỏng vấn' : `Lên lịch phỏng vấn — ${esc(uv.ho_ten)}`, foot: foot(l ? 'Lưu thay đổi' : 'Lưu lịch'),
-      body: `<div class="callout mb">${icon('info', 'sm')}<div><b>${esc(ct.vi_tri)}</b> · ${esc(Q.khOfCt(ct).ten_cong_ty)} · ${esc(Store.name('khu_vuc', ct.ma_khu_vuc))}<br>
-          Nhập đúng lịch <b>khách hàng đã chốt</b> — hệ thống không tự đổi giờ. Nhân viên phỏng vấn mặc định là <b>người phụ trách dự án</b>; nếu bị trùng lịch, hãy chọn nhân viên khác (BR10-5).</div></div>
+      body: `${extra ? `<div class="callout amber mb">${icon('alert', 'sm')}<div>${esc(extra)} — buổi này sẽ là <b>vòng ${Q.lichOfHs(hs.id).filter((x) => x.trang_thai !== ST.LICH.HUY).length + 1}</b>. Ghi rõ yêu cầu của khách hàng.</div></div>` : ''}
         <form class="form-grid" novalidate>
+        ${extra ? Form.field('Yêu cầu phỏng vấn bổ sung của khách hàng', 'ghi_chu', { type: 'textarea', req: true, full: true, ph: 'VD: Khách hàng muốn Giám đốc khối gặp thêm ứng viên trước khi gửi offer' }) : l?.ghi_chu ? `<div class="field full"><label>Yêu cầu phỏng vấn bổ sung</label><div>${esc(l.ghi_chu)}</div></div>` : ''}
         ${Form.field('Ngày phỏng vấn (khách hàng chốt)', 'ngay', { type: 'date', req: true, value: toDateStr(def) })}
         ${Form.field('Nhân viên phỏng vấn', 'ma_nhan_su', { req: true, value: defNs, opts: staffOpts, hint: 'Có thể chủ động chọn nhân viên khác đang làm việc (3a).' })}
         ${Form.field('Giờ bắt đầu', 'gio_bd', { type: 'time', req: true, value: fmtTime(def) })}
@@ -271,10 +271,10 @@ const Dlg = {
   },
   /** Chọn hồ sơ để lên lịch phỏng vấn — gõ tên ứng viên, hiện gợi ý (Fix Demo lần 1) */
   pickHsForInterview(ready) {
-    const items = ready.map((h) => { const u = Q.uv(h.ma_ung_vien); const c = Q.ct(h.ma_chi_tiet_du_an); return { id: h.id, label: u.ho_ten, sub: `${c.vi_tri} — ${Q.khOfCt(c).ten_cong_ty} · ${Code.ct(c.id)} · ${h.trang_thai === ST.HS.PV ? 'Cần phỏng vấn thêm' : 'KH đồng ý phỏng vấn'}`, search: `${u.ho_ten} ${c.vi_tri} ${Code.ct(c.id)}` }; });
+    const items = ready.map((h) => { const u = Q.uv(h.ma_ung_vien); const c = Q.ct(h.ma_chi_tiet_du_an); return { id: h.id, label: u.ho_ten, sub: `${c.vi_tri} — ${Q.khOfCt(c).ten_cong_ty} · ${Code.ct(c.id)} · ${Q.scheduleLabel(h)}`, search: `${u.ho_ten} ${c.vi_tri} ${Code.ct(c.id)}` }; });
     const m = modal({ size: 'sm', title: 'Chọn hồ sơ để lên lịch', foot: foot('Tiếp tục'),
       body: `<form novalidate><div class="field ta"><label>Ứng viên <span class="req">*</span></label><input class="input" name="hs_text" placeholder="Nhập tên ứng viên…" autocomplete="off"><input type="hidden" name="hs"></div>
-        <p class="muted small">Chỉ hiển thị hồ sơ khách hàng đã đồng ý phỏng vấn hoặc cần phỏng vấn thêm (${ready.length} hồ sơ).</p></form>` });
+        <p class="muted small">Gồm hồ sơ khách hàng đồng ý phỏng vấn và hồ sơ đang phỏng vấn — kể cả ứng viên đã có lịch hoặc đã Đạt khi khách hàng yêu cầu thêm buổi (${ready.length} hồ sơ).</p></form>` });
     const f = m.$('form'); Comp.typeahead(f.hs_text, items, (it) => (f.hs.value = it ? it.id : ''));
     submitForm(m, (x) => { if (!x.hs) return { ok: false, errors: { hs_text: 'Gõ tên và chọn ứng viên trong danh sách gợi ý.' } }; m.close(); Dlg.interview(Number(x.hs)); return { ok: true }; });
   },

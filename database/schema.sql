@@ -236,6 +236,7 @@ CREATE TABLE LICH_PHONG_VAN (
   nguoi_tham_gia_cong_ty    VARCHAR(500) COMMENT 'Người tham gia phía công ty',
   nguoi_tham_gia_khach_hang VARCHAR(500) COMMENT 'Người tham gia phía khách hàng',
   ly_do_huy          VARCHAR(500),
+  ghi_chu            VARCHAR(500) COMMENT 'Yêu cầu phỏng vấn bổ sung của khách hàng',
   trang_thai         VARCHAR(30) NOT NULL DEFAULT 'Đã lên lịch',
   vong               INT NOT NULL DEFAULT 1 COMMENT 'Vòng phỏng vấn (BR10-1)',
   INDEX ix_lich_ns_time (ma_nhan_su, thoi_gian_bat_dau),  -- kiểm tra trùng lịch BR10-2

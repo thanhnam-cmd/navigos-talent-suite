@@ -121,7 +121,6 @@ Pages.candidateDetail = {
           ${Auth.canOperate() && u.trang_thai === ST.UV.HD ? `<button class="btn" id="rec">${icon('send', 'sm')} Đề cử vào vị trí</button><button class="btn" id="arch">${icon('archive', 'sm')} Lưu trữ / hết nhu cầu</button>` : ''}
           ${Auth.canOperate() && u.trang_thai === ST.UV.LT ? `<button class="btn" id="unarch">${icon('undo', 'sm')} Kích hoạt lại</button>` : ''}
         </div></div>
-      ${u.trang_thai === ST.UV.TV ? `<div class="callout green mb">${icon('userCheck', 'sm')}<div>Ứng viên <b>đã nhận việc</b> (Đang thử việc) — đã được loại khỏi mọi danh sách khuyến nghị/đề cử và không xuất hiện trong kết quả lọc. Nếu thử việc không đạt, dùng thao tác “Thử việc không đạt” trên hồ sơ ứng tuyển để đưa về kho.</div></div>` : ''}
       ${u.trang_thai === ST.UV.LT ? `<div class="callout mb">${icon('archive', 'sm')}<div>Hồ sơ <b>lưu trữ</b> — không được lọc/đề cử và không liên hệ mời tuyển. Lịch sử đề cử, phỏng vấn vẫn được giữ (BR8-3).</div></div>` : ''}
       <div class="grid g-main">
         <div class="stack" style="gap:18px">

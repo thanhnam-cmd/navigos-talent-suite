@@ -36,6 +36,23 @@ const Q = {
   kqPv(lichId) { return DB.ket_qua_phong_van.find((k) => k.ma_lich === Number(lichId)); },
   feedbacks(lichId) { return DB.feedback.filter((f) => f.ma_lich === Number(lichId)); },
   kqTd(hsId) { return DB.ket_qua_tuyen_dung.find((k) => k.ma_ho_so_ung_vien === Number(hsId)); },
+  /** Hồ sơ được lên lịch phỏng vấn: KH đồng ý PV (Đề cử) hoặc đang Phỏng vấn và chưa có kết quả tuyển dụng (Test demo lần 2) */
+  canSchedule(h) {
+    if (this.kqTd(h.id)) return false;
+    return h.trang_thai === ST.HS.PV || (h.trang_thai === ST.HS.DECU && this.latestDeCu(h.id)?.phan_hoi_khach_hang === 'Đồng ý phỏng vấn');
+  },
+  /** Buổi phỏng vấn bổ sung theo yêu cầu khách hàng: vòng gần nhất còn chờ (chưa có kết quả) hoặc đã Đạt → trả về lý do, '' nếu là vòng tiếp theo thông thường */
+  extraRoundReason(h) {
+    if (h.trang_thai !== ST.HS.PV) return '';
+    const last = this.lichOfHs(h.id).filter((l) => l.trang_thai !== ST.LICH.HUY).at(-1); if (!last) return '';
+    const k = this.kqPv(last.id);
+    if (!k) return new Date(last.thoi_gian_bat_dau) > now() ? `Ứng viên đã có lịch vòng ${last.vong} ngày ${fmtDate(last.thoi_gian_bat_dau)}` : `Vòng ${last.vong} chưa ghi nhận kết quả`;
+    return k.ket_qua === 'Đạt' ? `Ứng viên đã Đạt vòng ${last.vong}` : '';
+  },
+  scheduleLabel(h) {
+    if (h.trang_thai === ST.HS.DECU) return 'KH đồng ý phỏng vấn';
+    const x = this.extraRoundReason(h); return x ? 'Phỏng vấn bổ sung · ' + x.replace(/^Ứng viên /, '') : 'Cần phỏng vấn thêm';
+  },
   /** Cảnh báo hạn — BR4-4 */
   deadline(ct) {
     if (!ct || CT_CLOSED.includes(ct.trang_thai)) return null;
@@ -528,9 +545,9 @@ const Svc = {
       const dc = Q.latestDeCu(hs.id);
       const allowed = hs.trang_thai === ST.HS.PV || (hs.trang_thai === ST.HS.DECU && dc?.phan_hoi_khach_hang === 'Đồng ý phỏng vấn');
       if (!allowed) return fail('Chỉ lên lịch khi khách hàng đã đồng ý phỏng vấn (hồ sơ “Đề cử”) hoặc hồ sơ đang “Phỏng vấn”.');
-      const last = Q.lichOfHs(hs.id).at(-1); const lastKq = last && Q.kqPv(last.id);
-      if (last && last.trang_thai === ST.LICH.LEN) return fail('Hồ sơ đang có lịch chưa diễn ra. Cập nhật hoặc hủy lịch đó trước.');
-      if (lastKq && lastKq.ket_qua === 'Đạt') return fail('Ứng viên đã Đạt phỏng vấn — đang chờ kết quả tuyển dụng từ khách hàng.');
+      if (Q.kqTd(hs.id)) return fail('Hồ sơ đã có kết quả tuyển dụng — không lên thêm lịch phỏng vấn.');
+      // Test demo lần 2: khách hàng có thể yêu cầu thêm buổi với ứng viên đã có lịch / đã Đạt → bắt buộc ghi rõ yêu cầu
+      if (Q.extraRoundReason(hs) && !String(data.ghi_chu || '').trim()) e.ghi_chu = 'Ghi rõ yêu cầu phỏng vấn bổ sung của khách hàng.';
     }
     [...(data.bd_iso && data.kt_iso ? [] : ['ngay', 'gio_bd', 'gio_kt']), 'hinh_thuc', 'ma_nhan_su'].forEach((k) => { if (!data[k]) e[k] = 'Bắt buộc nhập.'; });
     // Trình duyệt gửi kèm mốc thời gian ISO (đúng múi giờ người dùng); dự phòng ghép ngày + giờ
@@ -553,25 +570,13 @@ const Svc = {
     const row = { ma_nhan_su: Number(data.ma_nhan_su), thoi_gian_bat_dau: bd.toISOString(), thoi_gian_ket_thuc: kt.toISOString(), hinh_thuc: data.hinh_thuc, dia_diem_link: data.dia_diem_link,
       nguoi_tham_gia_cong_ty: data.nguoi_tham_gia_cong_ty || '', nguoi_tham_gia_khach_hang: data.nguoi_tham_gia_khach_hang || '',
       nguoi_tham_gia: [data.nguoi_tham_gia_cong_ty, data.nguoi_tham_gia_khach_hang].filter(Boolean).join(', ') || data.nguoi_tham_gia || '' };
+    if (!id) row.ghi_chu = String(data.ghi_chu || '').trim() || null;
     if (id) { const l = Store.get('lich_phong_van', id); if (l.trang_thai !== ST.LICH.LEN) return fail('Chỉ sửa lịch “Đã lên lịch” (BR10-4).'); Object.assign(l, row); Store.save(); return { ok: true, row: l }; }
     const vong = Q.lichOfHs(hs.id).filter((l) => l.trang_thai !== ST.LICH.HUY).length + 1;
     const l = Store.insert('lich_phong_van', { ma_ho_so_ung_vien: hs.id, ...row, trang_thai: ST.LICH.LEN, vong });
     if (hs.trang_thai !== ST.HS.PV) logStatus(hs, ST.HS.PV, `Lên lịch phỏng vấn vòng ${vong} – ${fmtDT(bd)} – NV phỏng vấn: ${ns.ho_ten}`);
+    else if (row.ghi_chu) logStatus(hs, ST.HS.PV, `Lên lịch phỏng vấn bổ sung vòng ${vong} theo yêu cầu khách hàng – ${fmtDT(bd)}: ${row.ghi_chu}`);
     Store.save(); return { ok: true, row: l, warnings: chk.warnings };
-  },
-  /** Màn hình "Quy tắc xếp lịch phỏng vấn" — BR10-6 */
-  saveScheduleRules(data) {
-    if (!Auth.isAdmin() && !Auth.isQL()) return fail('Chỉ Quản trị viên hoặc Quản lý được cấu hình quy tắc xếp lịch.');
-    const e = {}; const n = (k, lo, hi) => { const v = Number(data[k]); if (data[k] === '' || isNaN(v) || v < lo || v > hi) e[k] = `Nhập số từ ${lo} đến ${hi}.`; return Math.round(v); };
-    const row = { khoang_nghi_phut: n('khoang_nghi_phut', 0, 240), di_chuyen_phut: n('di_chuyen_phut', 0, 720), so_buoi_toi_da: n('so_buoi_toi_da', 1, 20),
-      gio_bat_dau: data.gio_bat_dau, gio_ket_thuc: data.gio_ket_thuc, canh_bao_cuoi_tuan: data.canh_bao_cuoi_tuan ? 1 : 0 };
-    ['gio_bat_dau', 'gio_ket_thuc'].forEach((k) => { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(row[k] || '')) e[k] = 'Giờ dạng HH:MM.'; });
-    if (!e.gio_bat_dau && !e.gio_ket_thuc && row.gio_bat_dau >= row.gio_ket_thuc) e.gio_ket_thuc = 'Giờ kết thúc phải sau giờ bắt đầu.';
-    if (Object.keys(e).length) return bad(e);
-    const meta = { ngay_cap_nhat: nowISO(), ma_nguoi_cap_nhat: Auth.user?.id ?? null };
-    const cur = DB.quy_tac_xep_lich[0];
-    if (cur) Object.assign(cur, row, meta); else Store.insert('quy_tac_xep_lich', { ...row, ...meta });
-    Store.save(); return { ok: true };
   },
   cancelInterview(id, reason) {
     const l = Store.get('lich_phong_van', id); if (l.trang_thai !== ST.LICH.LEN) return fail('Chỉ hủy lịch “Đã lên lịch” (BR10-4).');
@@ -592,8 +597,11 @@ const Svc = {
     if (data.feedback) Store.insert('feedback', { ma_lich: l.id, nguon_feedback: 'Khách hàng', noi_dung: data.feedback, ngay_gui: nowISO() });
     l.trang_thai = ST.LICH.XONG;
     const hs = Q.hs(l.ma_ho_so_ung_vien);
-    if (data.ket_qua === 'Không đạt') logStatus(hs, ST.HS.LOAI, `Không đạt phỏng vấn vòng ${l.vong}${data.nhan_xet ? ': ' + data.nhan_xet : ''}`);
-    else logStatus(hs, ST.HS.PV, data.ket_qua === 'Đạt' ? `Đạt phỏng vấn vòng ${l.vong} — chờ kết quả tuyển dụng từ khách hàng` : `Cần phỏng vấn thêm sau vòng ${l.vong}`);
+    if (data.ket_qua === 'Không đạt') {
+      logStatus(hs, ST.HS.LOAI, `Không đạt phỏng vấn vòng ${l.vong}${data.nhan_xet ? ': ' + data.nhan_xet : ''}`);
+      // buổi bổ sung còn chờ của hồ sơ không còn ý nghĩa → tự hủy
+      Q.lichOfHs(hs.id).filter((x) => x.trang_thai === ST.LICH.LEN).forEach((x) => { x.trang_thai = ST.LICH.HUY; x.ly_do_huy = `Tự động hủy: ứng viên không đạt vòng ${l.vong}`; });
+    } else logStatus(hs, ST.HS.PV, data.ket_qua === 'Đạt' ? `Đạt phỏng vấn vòng ${l.vong} — chờ kết quả tuyển dụng từ khách hàng` : `Cần phỏng vấn thêm sau vòng ${l.vong}`);
     Store.save(); return { ok: true };
   },
   /** UC_11 1c — sửa kết quả phỏng vấn đã ghi nhận */

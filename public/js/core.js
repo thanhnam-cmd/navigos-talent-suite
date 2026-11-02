@@ -235,7 +235,7 @@ const UI = {
             <button class="user-chip" id="userBtn"><div class="meta"><b id="uName"></b><span id="uRole"></span></div><span id="uAv"></span></button>
           </header>
           <main class="view" id="view"></main>
-          <footer class="footer">© ${new Date().getFullYear()} Navigos Group Việt Nam · Talent Suite — Hệ thống quản lý dự án tuyển dụng (Navigos Search)</footer>
+          <footer class="footer">© ${new Date().getFullYear()} Navigos Group Việt Nam · Talent Suite — Hệ thống quản lý dự án tuyển dụng (Navigos Group)</footer>
         </div>
       </div><div class="toasts" id="toasts"></div>`;
       $('#menuBtn').onclick = () => $('#app').classList.toggle('nav-open');
@@ -264,8 +264,8 @@ const UI = {
       nav += item('#/ket-qua', 'checkCircle', 'Kết quả tuyển dụng');
       nav += item('#/khach-hang', 'building', 'Danh sách khách hàng');
     }
-    if (Auth.isLead()) { nav += `<div class="nav-label">Quản lý</div>` + item('#/bao-cao', 'chart', 'Báo cáo - Thống kê') + item('#/nhan-su', 'idcard', 'Nhân sự') + (Auth.isQL() ? item('#/quy-tac-lich', 'clock', 'Quy tắc xếp lịch PV') : ''); }
-    if (Auth.isAdmin()) { nav += `<div class="nav-label">Quản trị hệ thống</div>` + item('#/tai-khoan', 'shield', 'Tài khoản & phân quyền') + item('#/danh-muc', 'layers', 'Danh mục dùng chung') + item('#/quy-tac-lich', 'clock', 'Quy tắc xếp lịch PV'); }
+    if (Auth.isLead()) { nav += `<div class="nav-label">Quản lý</div>` + item('#/bao-cao', 'chart', 'Báo cáo - Thống kê') + item('#/nhan-su', 'idcard', 'Nhân sự'); }
+    if (Auth.isAdmin()) { nav += `<div class="nav-label">Quản trị hệ thống</div>` + item('#/tai-khoan', 'shield', 'Tài khoản & phân quyền') + item('#/danh-muc', 'layers', 'Danh mục dùng chung'); }
     $('#sidebar').innerHTML = `<a class="brand" href="#/"><img src="assets/logo-white.png" alt="Navigos Group"></a>
       <nav class="nav">${nav}</nav>
       <div class="sidebar-foot"><a href="#/cai-dat">${icon('settings')}<span>Cài đặt</span></a><a href="#" class="danger" id="logoutBtn">${icon('logout')}<span>Đăng xuất</span></a></div>`;
