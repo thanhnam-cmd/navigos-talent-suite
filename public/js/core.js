@@ -133,7 +133,7 @@ const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hi
 const DB_KEY = 'navigos_talent_db_v3';
 const TABLES = ['khu_vuc', 'linh_vuc', 'cap_bac', 'chuyen_mon', 'nhan_su', 'khach_hang', 'du_an_tuyen_dung', 'chi_tiet_du_an',
   'kenh_dang_tuyen', 'tin_dang', 'phan_cong', 'ung_vien', 'ho_so_ung_tuyen', 'lich_su_trang_thai', 'de_cu', 'lich_phong_van',
-  'ket_qua_phong_van', 'feedback', 'ket_qua_tuyen_dung', 'quy_tac_xep_lich', 'gop_y_de_cu'];
+  'ket_qua_phong_van', 'feedback', 'ket_qua_tuyen_dung', 'quy_tac_xep_lich', 'gop_y_de_cu', 'yeu_cau_ho_tro'];
 
 const Store = {
   db: null,
@@ -256,7 +256,7 @@ const UI = {
     let nav = item('#/', 'home', 'Trang chủ');
     if (Auth.canWork()) {
       nav += `<div class="nav-label">Nghiệp vụ tuyển dụng</div>`;
-      nav += item('#/du-an', 'briefcase', 'Dự án tuyển dụng', Auth.isQL() ? c.choPhanCong : 0);
+      nav += item('#/du-an', 'briefcase', 'Dự án tuyển dụng', Auth.isQL() ? c.choPhanCong + c.yeuCauHoTro : 0);
       nav += item('#/ung-vien', 'users', 'Danh sách ứng viên', Auth.canOperate() ? c.chuaChuanHoa : 0);
       if (!Auth.isBGD()) nav += item('#/thu-thap', 'inbox', 'Thu thập hồ sơ', Auth.canOperate() ? c.choGan : 0);
       nav += item('#/de-cu', 'send', 'Danh sách đề cử', Auth.isQL() ? c.choDuyet + c.gopYMoi : Auth.isStaff() ? c.canSua : 0);
@@ -410,7 +410,7 @@ const Export = {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     toast('Đã xuất tệp Excel: ' + esc(filename) + '.xls');
   },
-  pdf() { toast('Chọn “Lưu dưới dạng PDF” trong hộp thoại in để xuất PDF.', 'info'); setTimeout(() => window.print(), 300); },
+  pdf() { $$('.toast').forEach((t) => t.remove()); window.print(); },
 };
 
 /* ---------- Phân trang ---------- */

@@ -31,6 +31,7 @@ const MAP = {
   ket_qua_tuyen_dung: { sql: 'KET_QUA_TUYEN_DUNG', pk: 'ma_ket_qua_td' },
   quy_tac_xep_lich: { sql: 'QUY_TAC_XEP_LICH', pk: 'ma_quy_tac' },
   gop_y_de_cu: { sql: 'GOP_Y_DE_CU', pk: 'ma_gop_y' },
+  yeu_cau_ho_tro: { sql: 'YEU_CAU_HO_TRO', pk: 'ma_yeu_cau' },
 };
 const ORDER = Object.keys(MAP); // thứ tự cha → con (đảm bảo khóa ngoại khi INSERT)
 const LOG_COLS = ['thoi_diem', 'nguoi', 'kenh', 'url', 'tong', 'moi', 'trung', 'gan', 'cho_gan', 'bo_qua'];
@@ -112,6 +113,17 @@ class Repository {
       await c.query("ALTER TABLE LICH_PHONG_VAN ADD COLUMN ghi_chu VARCHAR(500) NULL COMMENT 'Yêu cầu phỏng vấn bổ sung của khách hàng' AFTER ly_do_huy");
       console.log('• Migration: LICH_PHONG_VAN thêm ghi_chu (phỏng vấn bổ sung)');
     }
+    // 7) Fix demo 3: vai trò trong phân công (Phụ trách / Hỗ trợ) và đề nghị bổ sung người hỗ trợ
+    if (!(await hasCol('PHAN_CONG', 'vai_tro'))) {
+      await c.query("ALTER TABLE PHAN_CONG ADD COLUMN vai_tro VARCHAR(20) NOT NULL DEFAULT 'Phụ trách' COMMENT 'Phụ trách: toàn bộ nghiệp vụ; Hỗ trợ: chỉ phỏng vấn và ghi nhận kết quả buổi mình tham gia' AFTER trang_thai");
+      await c.query("ALTER TABLE PHAN_CONG ADD CONSTRAINT ck_pc_vt CHECK (vai_tro IN ('Phụ trách','Hỗ trợ'))");
+      console.log('• Migration: PHAN_CONG thêm vai_tro (Phụ trách / Hỗ trợ)');
+    }
+    if (!(await has('YEU_CAU_HO_TRO'))) {
+      await c.query(fs.readFileSync(path.join(this.cfg.ROOT, 'database', 'schema.sql'), 'utf8').match(/CREATE TABLE YEU_CAU_HO_TRO[\s\S]*?ENGINE=InnoDB;/)[0]);
+      console.log('• Migration: tạo bảng YEU_CAU_HO_TRO');
+    }
+    await c.query("UPDATE NHAN_SU SET chuc_vu = 'Giám đốc Navigos Group Việt Nam' WHERE chuc_vu = 'Giám đốc Navigos Search'");
   }
 
   async connect() {

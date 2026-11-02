@@ -113,9 +113,11 @@ CREATE TABLE PHAN_CONG (
   ma_nhan_su        INT NOT NULL,
   ngay_phan_cong    DATETIME(3) NOT NULL,
   trang_thai        VARCHAR(20) NOT NULL DEFAULT 'Đang phụ trách',
+  vai_tro           VARCHAR(20) NOT NULL DEFAULT 'Phụ trách' COMMENT 'Phụ trách: toàn bộ nghiệp vụ; Hỗ trợ: chỉ phỏng vấn và ghi nhận kết quả buổi mình tham gia',
   CONSTRAINT fk_pc_ct FOREIGN KEY (ma_chi_tiet_du_an) REFERENCES CHI_TIET_DU_AN(ma_chi_tiet_du_an),
   CONSTRAINT fk_pc_ns FOREIGN KEY (ma_nhan_su) REFERENCES NHAN_SU(ma_nhan_su),
-  CONSTRAINT ck_pc_tt CHECK (trang_thai IN ('Đang phụ trách','Đã chuyển'))
+  CONSTRAINT ck_pc_tt CHECK (trang_thai IN ('Đang phụ trách','Đã chuyển')),
+  CONSTRAINT ck_pc_vt CHECK (vai_tro IN ('Phụ trách','Hỗ trợ'))
 ) ENGINE=InnoDB;
 
 -- ---------- Kênh đăng tuyển ----------
@@ -295,6 +297,22 @@ CREATE TABLE GOP_Y_DE_CU (
   CONSTRAINT fk_gy_dc FOREIGN KEY (ma_de_cu) REFERENCES DE_CU(ma_de_cu),
   CONSTRAINT fk_gy_ns FOREIGN KEY (ma_nguoi_gop_y) REFERENCES NHAN_SU(ma_nhan_su),
   CONSTRAINT ck_gy_tt CHECK (trang_thai IN ('Chờ Quản lý xem','Đã xem'))
+) ENGINE=InnoDB;
+
+-- ---------- Đề nghị bổ sung người hỗ trợ (nhân viên phụ trách gửi Quản lý khi không còn nhân sự phỏng vấn phù hợp) ----------
+CREATE TABLE YEU_CAU_HO_TRO (
+  ma_yeu_cau        INT AUTO_INCREMENT PRIMARY KEY,
+  ma_chi_tiet_du_an INT NOT NULL,
+  ma_nguoi_gui      INT NOT NULL,
+  noi_dung          VARCHAR(1000) NOT NULL,
+  ngay_gui          DATETIME(3) NOT NULL,
+  trang_thai        VARCHAR(20) NOT NULL DEFAULT 'Chờ xử lý',
+  ma_nguoi_xu_ly    INT NULL,
+  ngay_xu_ly        DATETIME(3) NULL,
+  CONSTRAINT fk_yc_ct FOREIGN KEY (ma_chi_tiet_du_an) REFERENCES CHI_TIET_DU_AN(ma_chi_tiet_du_an),
+  CONSTRAINT fk_yc_gui FOREIGN KEY (ma_nguoi_gui) REFERENCES NHAN_SU(ma_nhan_su),
+  CONSTRAINT fk_yc_xl FOREIGN KEY (ma_nguoi_xu_ly) REFERENCES NHAN_SU(ma_nhan_su),
+  CONSTRAINT ck_yc_tt CHECK (trang_thai IN ('Chờ xử lý','Đã xử lý'))
 ) ENGINE=InnoDB;
 
 -- ---------- Quy tắc xếp lịch phỏng vấn (màn hình "Quy tắc xếp lịch phỏng vấn" — BR10-6) ----------

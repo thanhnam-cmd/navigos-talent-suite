@@ -32,7 +32,7 @@ const serial = (fn) => { const p = chain.then(fn, fn); chain = p.catch(() => {})
 const ADMIN_FNS = new Set(['saveAccount', 'resetPassword', 'setRole', 'deactivateAccount', 'addCatalog', 'toggleChannel']);
 // Bảng phân quyền (Fix Demo lần 1): mặc định mọi thao tác nghiệp vụ chỉ dành cho Nhân viên
 const ADMIN_OR_QL_FNS = new Set([]); // Test demo lần 2: bỏ màn hình Quy tắc xếp lịch — quy tắc là cấu hình hệ thống cố định
-const QL_FNS = new Set(['assign', 'approveRecommendation', 'requestEdit', 'markCommentsSeen']);
+const QL_FNS = new Set(['assign', 'approveRecommendation', 'requestEdit', 'markCommentsSeen', 'closeSupportRequest']);
 const BGD_FNS = new Set(['addRecommendationComment']);
 const ANY_FNS = new Set(['changePassword']);
 const BLOCKED = new Set(['_withdrawActive', 'ingest', 'filterCandidates', 'suggestStaff', 'genPassword']);

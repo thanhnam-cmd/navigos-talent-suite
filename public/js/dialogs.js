@@ -45,7 +45,7 @@ const Dlg = {
     const m = modal({ size: 'lg', title: `${Code.da(d.id)} · ${esc(d.ten_du_an)}`,
       foot: `<button class="btn" id="eDa">${icon('edit', 'sm')} Sửa thông tin</button><button class="btn primary" id="addCt">${icon('plus', 'sm')} Thêm vị trí</button>`,
       body: `<dl class="kv"><dt>Khách hàng</dt><dd>${esc(Q.kh(d.ma_khach_hang).ten_cong_ty)}</dd><dt>Ngày bắt đầu</dt><dd>${fmtDate(d.ngay_bat_dau)}${d.ngay_ket_thuc ? ' → ' + fmtDate(d.ngay_ket_thuc) : ''}</dd><dt>Trạng thái</dt><dd>${badge(d.trang_thai)}</dd><dt>Ghi chú</dt><dd>${esc(d.ghi_chu || '—')}</dd></dl>
-        <div class="mt"><div class="prog-meta"><span>Tiến độ = tổng ứng viên đã nhận việc / tổng số lượng cần tuyển (BR4-5)</span><b>${d.tien_do}%</b></div>${progressBar(d.tien_do, d.tien_do >= 100 ? 'green' : '')}</div>
+        <div class="mt"><div class="prog-meta"><span>Tiến độ = tổng ứng viên đã nhận việc / tổng số lượng cần tuyển</span><b>${d.tien_do}%</b></div>${progressBar(d.tien_do, d.tien_do >= 100 ? 'green' : '')}</div>
         <div class="table-wrap mt"><table class="table responsive"><thead><tr><th>Vị trí</th><th class="num">Cần</th><th class="num">Nhận việc</th><th>Hạn</th><th>Trạng thái</th></tr></thead><tbody>
         ${cts.map((c) => `<tr class="clickable" data-ct="${c.id}"><td class="cell-main"><div class="t-title">${esc(c.vi_tri)}</div><div class="t-sub">${Code.ct(c.id)}</div></td><td data-label="Cần" class="num">${c.so_luong}</td><td data-label="Nhận việc" class="num">${Q.hired(c.id)}</td><td data-label="Hạn">${fmtDate(c.han_hoan_thanh)}</td><td data-label="Trạng thái">${badge(c.trang_thai)}</td></tr>`).join('') || `<tr><td colspan="5">${emptyState('Chưa có vị trí')}</td></tr>`}</tbody></table></div>` });
     m.$('#addCt').onclick = () => { m.close(); Dlg.position(null, d.id); };
@@ -54,11 +54,30 @@ const Dlg = {
   },
   /* ----- Phân công (UC_05) ----- */
   assign(ctId) {
-    const ct = Q.ct(ctId); const cur = new Set(Q.assignees(ct.id).map((n) => n.id)); const list = Svc.suggestStaff(ct);
-    const m = modal({ title: `Phân công phụ trách — ${esc(ct.vi_tri)}`, foot: foot('Phân công'),
-      body: `<form novalidate><p class="muted small" style="margin-top:0">Khu vực vị trí: <b>${esc(Store.name('khu_vuc', ct.ma_khu_vuc))}</b>. Có thể chọn nhiều nhân viên (3a). Bỏ chọn nhân viên hiện tại để chuyển phân công — phân công cũ được giữ với trạng thái “Đã chuyển” (BR5-4).</p>
-        <div class="stack">${list.map(({ n, sameArea, load }) => `<label class="alert" style="cursor:pointer"><input type="checkbox" name="s_${n.id}" ${cur.has(n.id) ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--primary)"><div class="person" style="flex:1">${avatar(n.ho_ten, 'sm')}<div><div class="nm small">${esc(n.ho_ten)} ${sameArea ? '<span class="badge sm green">Cùng khu vực</span>' : ''}</div><div class="sb">${esc(n.chuc_vu)} · ${esc(Store.name('khu_vuc', n.ma_khu_vuc))}</div></div></div><span class="badge ${load >= 3 ? 'amber' : ''} sm">${load} vị trí đang phụ trách</span></label>`).join('')}</div></form>` });
-    submitForm(m, (v) => { const ids = Object.entries(v).filter(([k, x]) => k.startsWith('s_') && x).map(([k]) => Number(k.slice(2))); const r = Svc.assign(ct.id, ids, true); if (r.ok) doneThen(m, 'Đã lưu phân công — vị trí chuyển “Đang thực hiện”')(r); return r; });
+    const ct = Q.ct(ctId); const cur = new Map(Q.pcOf(ct.id).map((p) => [p.ma_nhan_su, p.vai_tro || PC_ROLE.PT])); const list = Svc.suggestStaff(ct);
+    const reqs = Q.supportRequests(ct.id);
+    const roleSel = (n) => `<select class="select" name="r_${n.id}" style="width:156px;height:34px">${[['', '— Không chọn —'], [PC_ROLE.PT, 'Phụ trách'], [PC_ROLE.HT, 'Hỗ trợ']].map(([a, b]) => `<option value="${a}" ${(cur.get(n.id) || '') === a ? 'selected' : ''}>${b}</option>`).join('')}</select>`;
+    const m = modal({ size: 'lg', title: `Phân công nhân sự — ${esc(ct.vi_tri)}`, foot: foot('Lưu phân công'),
+      body: `<form novalidate>
+        ${reqs.map((y) => `<div class="callout amber mb">${icon('users', 'sm')}<div><b>${esc(Q.ns(y.ma_nguoi_gui).ho_ten)}</b> đề nghị bổ sung người hỗ trợ (${fmtDT(y.ngay_gui)}): ${esc(y.noi_dung)}</div></div>`).join('')}
+        <div class="grid g-2 mb" style="gap:10px">
+          <div class="alert" style="align-items:flex-start"><span class="badge blue sm">Phụ trách</span><div class="small">Thực hiện toàn bộ nghiệp vụ của vị trí: đề cử, gửi khách hàng, lên lịch, ghi nhận kết quả, offer.</div></div>
+          <div class="alert" style="align-items:flex-start"><span class="badge violet sm">Hỗ trợ</span><div class="small">Chỉ được chọn làm người phỏng vấn, xem lịch của mình, xem vị trí và hồ sơ ứng viên mình phỏng vấn, ghi nhận kết quả buổi mình tham gia.</div></div></div>
+        <p class="muted small" style="margin-top:0">Khu vực vị trí: <b>${esc(Store.name('khu_vuc', ct.ma_khu_vuc))}</b>. Bỏ chọn một nhân viên đang tham gia để chuyển phân công — lịch sử phân công vẫn được giữ.</p>
+        <div class="stack">${list.map(({ n, sameArea, load }) => `<div class="alert"><div class="person" style="flex:1">${avatar(n.ho_ten, 'sm')}<div><div class="nm small">${esc(n.ho_ten)} ${sameArea ? '<span class="badge sm green">Cùng khu vực</span>' : ''}</div><div class="sb">${esc(n.chuc_vu)} · ${esc(Store.name('khu_vuc', n.ma_khu_vuc))} · ${load} vị trí đang tham gia</div></div></div>${roleSel(n)}</div>`).join('')}</div></form>` });
+    submitForm(m, (v) => {
+      const pick = Object.entries(v).filter(([k, x]) => k.startsWith('r_') && x); const ids = pick.map(([k]) => Number(k.slice(2)));
+      const r = Svc.assign(ct.id, ids, true, Object.fromEntries(pick.map(([k, x]) => [Number(k.slice(2)), x])));
+      if (r.ok) doneThen(m, 'Đã lưu phân công')(r); return r;
+    });
+  },
+  /** Nhân viên phụ trách đề nghị Quản lý bổ sung người hỗ trợ phỏng vấn */
+  requestSupport(ctId, then) {
+    const ct = Q.ct(ctId);
+    const m = modal({ title: 'Báo Quản lý bổ sung người hỗ trợ', foot: foot('Gửi Quản lý'),
+      body: `<form novalidate><div class="alert mb"><div><div class="strong">${esc(ct.vi_tri)}</div><div class="muted small">ID vị trí ${Code.ct(ct.id)} · ${esc(Q.khOfCt(ct).ten_cong_ty)}</div></div></div>
+        ${Form.field('Nội dung đề nghị', 'noi_dung', { type: 'textarea', req: true, value: 'Nhân sự của vị trí đều trùng lịch trong khung giờ khách hàng chốt — đề nghị phân công thêm người hỗ trợ phỏng vấn.' })}</form>` });
+    submitForm(m, (v) => { const r = Svc.requestSupport(ct.id, v.noi_dung); if (r.ok) doneThen(m, 'Đã gửi đề nghị — Quản lý sẽ nhận thông báo', then)(r); return r; });
   },
   /* ----- Gắn mã tin đăng (UC_04 6a) ----- */
   posting(ctId) {
@@ -99,29 +118,31 @@ const Dlg = {
   /** UC_10 — Lịch do khách hàng chốt; NV phỏng vấn mặc định là người phụ trách dự án; trùng lịch → chọn NV khác */
   interview(hsId, lichId = null, then) {
     const hs = Q.hs(hsId); const uv = Q.uv(hs.ma_ung_vien); const ct = Q.ct(hs.ma_chi_tiet_du_an); const l = lichId ? Store.get('lich_phong_van', lichId) : null;
-    const asg = Q.assignees(ct.id);
+    const asg = Q.assignees(ct.id); const kh = Q.khOfCt(ct);
     if (!asg.length) return toast('Dự án chưa có nhân viên phụ trách — cần Quản lý phân công trước khi lên lịch phỏng vấn.', 'warn');
+    // Fix demo 3: chỉ chọn nhân sự của vị trí (Phụ trách / Hỗ trợ); thiếu người → báo Quản lý phân công thêm người hỗ trợ
+    const team = Q.team(ct.id); const old = l && !team.some((n) => n.id === l.ma_nhan_su) ? Q.ns(l.ma_nhan_su) : null;
     const defNs = l?.ma_nhan_su || Q.defaultInterviewer(ct).id;
-    const others = DB.nhan_su.filter((n) => n.trang_thai_lam_viec === 'Đang làm việc' && n.vai_tro === ROLES.NV && !asg.some((a) => a.id === n.id));
-    const optLabel = (n, tag) => `${n.ho_ten} — ${Store.name('khu_vuc', n.ma_khu_vuc)}${tag}`;
-    const staffOpts = [...asg.map((n) => [n.id, optLabel(n, ' · phụ trách dự án')]), ...others.map((n) => [n.id, optLabel(n, n.ma_khu_vuc === ct.ma_khu_vuc ? ' · cùng khu vực' : '')])];
+    const optLabel = (n) => `${n.ho_ten} — ${Store.name('khu_vuc', n.ma_khu_vuc)} · ${asg.some((a) => a.id === n.id) ? 'Phụ trách' : 'Hỗ trợ'}`;
+    const staffOpts = [...team.map((n) => [n.id, optLabel(n)]), ...(old ? [[old.id, `${old.ho_ten} — không còn trong nhân sự vị trí`]] : [])];
+    const chips = `<div class="dlg-chips"><span class="chip-info">${icon('briefcase', 'sm')}<label>Vị trí</label><b>${esc(ct.vi_tri)}</b></span><span class="chip-info"><label>ID vị trí</label><b>${Code.ct(ct.id)}</b></span><span class="chip-info">${icon('building', 'sm')}<label>Khách hàng</label><b>${esc(kh.ten_cong_ty)}</b></span></div>`;
     const def = l ? new Date(l.thoi_gian_bat_dau) : (() => { const d = new Date(now()); d.setDate(d.getDate() + 1); if ([0, 6].includes(d.getDay())) d.setDate(d.getDate() + (d.getDay() === 6 ? 2 : 1)); d.setHours(9, 0, 0, 0); return d; })();
     const defEnd = l ? new Date(l.thoi_gian_ket_thuc) : new Date(def.getTime() + 3600000);
-    const R = Q.rules(); const extra = !l && Q.extraRoundReason(hs);
-    const m = modal({ size: 'lg', title: l ? 'Cập nhật lịch phỏng vấn' : `Lên lịch phỏng vấn — ${esc(uv.ho_ten)}`, foot: foot(l ? 'Lưu thay đổi' : 'Lưu lịch'),
+    const extra = !l && Q.extraRoundReason(hs);
+    const m = modal({ size: 'lg', title: `${l ? 'Cập nhật lịch phỏng vấn' : 'Lên lịch phỏng vấn'} — ${esc(uv.ho_ten)}${chips}`, foot: foot(l ? 'Lưu thay đổi' : 'Lưu lịch'),
       body: `${extra ? `<div class="callout amber mb">${icon('alert', 'sm')}<div>${esc(extra)} — buổi này sẽ là <b>vòng ${Q.lichOfHs(hs.id).filter((x) => x.trang_thai !== ST.LICH.HUY).length + 1}</b>. Ghi rõ yêu cầu của khách hàng.</div></div>` : ''}
         <form class="form-grid" novalidate>
         ${extra ? Form.field('Yêu cầu phỏng vấn bổ sung của khách hàng', 'ghi_chu', { type: 'textarea', req: true, full: true, ph: 'VD: Khách hàng muốn Giám đốc khối gặp thêm ứng viên trước khi gửi offer' }) : l?.ghi_chu ? `<div class="field full"><label>Yêu cầu phỏng vấn bổ sung</label><div>${esc(l.ghi_chu)}</div></div>` : ''}
         ${Form.field('Ngày phỏng vấn (khách hàng chốt)', 'ngay', { type: 'date', req: true, value: toDateStr(def) })}
-        ${Form.field('Nhân viên phỏng vấn', 'ma_nhan_su', { req: true, value: defNs, opts: staffOpts, hint: 'Có thể chủ động chọn nhân viên khác đang làm việc (3a).' })}
+        ${Form.field('Nhân viên phỏng vấn', 'ma_nhan_su', { req: true, value: defNs, opts: staffOpts, hint: `Nhân sự phụ trách / hỗ trợ của vị trí (${team.length} người). <a href="#" data-sup>Cần thêm người? Báo Quản lý</a>` })}
         ${Form.field('Giờ bắt đầu', 'gio_bd', { type: 'time', req: true, value: fmtTime(def) })}
         ${Form.field('Giờ kết thúc', 'gio_kt', { type: 'time', req: true, value: fmtTime(defEnd) })}
         ${Form.field('Hình thức', 'hinh_thuc', { req: true, value: l?.hinh_thuc || 'Trực tuyến', opts: ['Trực tuyến', 'Trực tiếp'] })}
         ${Form.field('Đường dẫn / Địa điểm', 'dia_diem_link', { req: true, value: l?.dia_diem_link || '', ph: 'https://meet.google.com/… hoặc địa chỉ văn phòng khách hàng' })}
         ${Form.field('Người tham gia — phía công ty', 'nguoi_tham_gia_cong_ty', { value: l ? l.nguoi_tham_gia_cong_ty || '' : `${Q.ns(defNs).ho_ten} (Navigos)` })}
         ${Form.field('Người tham gia — phía khách hàng', 'nguoi_tham_gia_khach_hang', { value: l ? l.nguoi_tham_gia_khach_hang || '' : Q.khOfCt(ct).nguoi_lien_he })}
-        <div class="full" id="ivCheck"></div></form>
-        <p class="muted small" style="margin:10px 0 0">Quy tắc đang áp dụng: nghỉ tối thiểu ${R.khoang_nghi_phut}′ giữa hai buổi · di chuyển khác khu vực ${R.di_chuyen_phut}′ · giờ làm việc ${R.gio_bat_dau}–${R.gio_ket_thuc}${Number(R.canh_bao_cuoi_tuan) ? ' · cảnh báo cuối tuần' : ''} · tối đa ${R.so_buoi_toi_da} buổi/ngày.</p>` });
+        <div class="full" id="ivCheck"></div></form>` });
+    m.$$('[data-sup]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); Dlg.requestSupport(ct.id, () => {}); }));
     const f = m.$('form');
     const times = () => { const v = Form.values(f); const bd = v.ngay && v.gio_bd ? new Date(`${v.ngay}T${v.gio_bd}`) : null; const kt = v.ngay && v.gio_kt ? new Date(`${v.ngay}T${v.gio_kt}`) : null; return { v, bd, kt }; };
     // Bước 2: kiểm tra trùng lịch & cảnh báo ngay khi nhập (cùng quy tắc với máy chủ)
@@ -132,11 +153,13 @@ const Dlg = {
       if (chk.conflicts.length) {
         const free = Q.freeInterviewers({ bd, kt, hinh_thuc: v.hinh_thuc, ctId: ct.id, exceptId: lichId }).slice(0, 6);
         box.innerHTML = `<div class="callout red">${icon('alert', 'sm')}<div><b>Trùng lịch — không thể lưu.</b> ${esc(Q.ns(v.ma_nhan_su).ho_ten)} đã có: ${chk.conflicts.map((c) => `${fmtTime(c.thoi_gian_bat_dau)}–${fmtTime(c.thoi_gian_ket_thuc)} (${esc(Q.uv(Q.hs(c.ma_ho_so_ung_vien).ma_ung_vien).ho_ten)})`).join(', ')}.
-          <div class="mt-sm">Chọn nhân viên khác đang rảnh trong khung giờ này:</div>
-          <div class="chip-group mt-sm">${free.map((x) => `<button type="button" class="chip" data-ns="${x.id}">${esc(x.ho_ten)} · ${esc(x.khu_vuc)}${x.canh_bao ? ` · ${x.canh_bao} cảnh báo` : ''}</button>`).join('') || '<span class="small">Không còn nhân viên nào rảnh — hãy trao đổi lại với khách hàng.</span>'}</div></div></div>`;
+          ${free.length ? `<div class="mt-sm">Chọn nhân sự khác của vị trí đang rảnh trong khung giờ này:</div>
+          <div class="chip-group mt-sm">${free.map((x) => `<button type="button" class="chip" data-ns="${x.id}">${esc(x.ho_ten)} · ${x.vai_tro}${x.canh_bao ? ` · ${x.canh_bao} cảnh báo` : ''}</button>`).join('')}</div>`
+          : `<div class="mt-sm">Không còn nhân sự nào của vị trí rảnh trong khung giờ này.</div><button type="button" class="btn sm mt-sm" data-sup>${icon('users', 'sm')} Báo Quản lý phân công thêm người hỗ trợ</button>`}</div></div>`;
         m.$$('[data-ns]').forEach((b) => (b.onclick = () => { f.ma_nhan_su.value = b.dataset.ns; f.ma_nhan_su.dispatchEvent(new Event('change')); }));
+        m.$$('#ivCheck [data-sup]').forEach((b) => (b.onclick = () => Dlg.requestSupport(ct.id, () => {})));
       } else if (chk.warnings.length) {
-        box.innerHTML = `<div class="callout amber">${icon('alert', 'sm')}<div><b>Cảnh báo xếp lịch (${chk.warnings.length})</b> — vẫn lưu được sau khi xác nhận (BR10-6):<ul style="margin:6px 0 0;padding-left:18px">${chk.warnings.map((w) => `<li><b>${esc(w.loai)}:</b> ${esc(w.text)}</li>`).join('')}</ul></div></div>`;
+        box.innerHTML = `<div class="callout amber">${icon('alert', 'sm')}<div><b>Cảnh báo xếp lịch (${chk.warnings.length})</b> — vẫn lưu được sau khi xác nhận:<ul style="margin:6px 0 0;padding-left:18px">${chk.warnings.map((w) => `<li><b>${esc(w.loai)}:</b> ${esc(w.text)}</li>`).join('')}</ul></div></div>`;
       } else box.innerHTML = `<div class="callout green">${icon('checkCircle', 'sm')}<div>Không trùng lịch, không có cảnh báo — sẵn sàng lưu.</div></div>`;
     };
     let prevNs = Number(defNs);
@@ -179,8 +202,16 @@ const Dlg = {
         <div class="full callout small">${icon('info', 'sm')}<div><b>Đạt:</b> hồ sơ chuyển sang tab <b>Chờ ghi nhận</b> để ghi nhận offer. <b>Không đạt:</b> hồ sơ Bị loại. <b>Cần phỏng vấn thêm:</b> tạo lịch vòng tiếp theo.</div></div></form>` });
     m.$$('#kq [data-v]').forEach((c) => (c.onclick = () => { m.$$('#kq [data-v]').forEach((x) => x.classList.remove('outline-primary')); c.classList.add('outline-primary'); m.$('[name=ket_qua]').value = c.dataset.v; }));
     submitForm(m, (v) => {
-      const r = edit ? Svc.updateInterviewResult(lichId, v) : Svc.interviewResult(lichId, v);
-      if (r.ok) doneThen(m, edit ? 'Đã cập nhật kết quả phỏng vấn' : v.ket_qua === 'Không đạt' ? 'Đã lưu — hồ sơ chuyển “Bị loại”' : v.ket_qua === 'Đạt' ? 'Đã lưu — chuyển sang Chờ ghi nhận kết quả tuyển dụng' : 'Đã lưu — có thể tạo lịch vòng tiếp theo', then)(r);
+      const save = (x) => (edit ? Svc.updateInterviewResult(lichId, x) : Svc.interviewResult(lichId, x));
+      const done = doneThen(m, edit ? 'Đã cập nhật kết quả phỏng vấn' : v.ket_qua === 'Không đạt' ? 'Đã lưu — hồ sơ chuyển “Bị loại”' : v.ket_qua === 'Đạt' ? 'Đã lưu — chuyển sang Chờ ghi nhận kết quả tuyển dụng' : 'Đã lưu — có thể tạo lịch vòng tiếp theo', then);
+      const r = save(v);
+      if (r.ok) { done(r); return r; }
+      if (r.needConfirm) { // hồ sơ còn buổi phỏng vấn khác đang chờ → hỏi trước khi hủy, không hủy ngầm
+        confirmBox({ title: 'Hủy các buổi phỏng vấn còn chờ?', danger: true, okText: 'Lưu & hủy các buổi này',
+          message: `Ứng viên <b>Không đạt</b> nên hồ sơ chuyển “Bị loại”. Các buổi phỏng vấn sau của ứng viên vẫn đang chờ và sẽ được <b>hủy</b>:<ul style="margin:8px 0 0;padding-left:18px">${r.pending.map((x) => `<li>${esc(x.text)}</li>`).join('')}</ul>`,
+          onOk: () => { const r2 = save({ ...v, xac_nhan_huy_lich: true }); if (!r2.ok) { toast(r2.error || 'Không lưu được kết quả.', 'err'); return; } done(r2); } });
+        return { ok: true };
+      }
       return r;
     });
   },
@@ -265,7 +296,7 @@ const Dlg = {
       const r = Svc.createRecommendations(Number(v.ct), [u.id], { dot_de_cu: v.dot_de_cu, ghi_chu: v.ghi_chu, per: { [u.id]: { exp: v.exp === '' ? null : Number(v.exp), salary: v.salary, notice: v.notice } } });
       if (r.errors) return r;
       if (!r.ok) return { ok: false, error: (r.skipped || []).join('; ') || r.error };
-      m.close(); toast(`Đã tạo đề cử cho ${esc(u.ho_ten)} — chờ Quản lý duyệt`); Pages.recommendations.tab = 'cho-duyet'; Router.go('#/de-cu');
+      m.close(); toast(`Đã tạo đề cử cho ${esc(u.ho_ten)} — chờ Quản lý duyệt`); Pages.recommendations.tab = 'cho-duyet'; Router.go('#/de-cu?ct=' + v.ct);
       return { ok: true };
     });
   },
@@ -283,7 +314,7 @@ const Dlg = {
     const hs = Q.hs(hsId); const uv = Q.uv(hs.ma_ung_vien); const ct = Q.ct(hs.ma_chi_tiet_du_an);
     const others = Q.hsOfUv(uv.id).filter((h) => h.id !== hs.id && HS_ACTIVE.includes(h.trang_thai));
     const m = modal({ title: `Ghi nhận kết quả tuyển dụng — ${esc(uv.ho_ten)}`, foot: foot('Lưu kết quả'),
-      body: `<div class="callout mb">${icon('info', 'sm')}<div>Offer do <b>khách hàng</b> gửi trực tiếp cho ứng viên qua email. Hệ thống chỉ ghi nhận kết quả và theo dõi đến khi ứng viên bắt đầu thử việc (BR9-2).</div></div>
+      body: `<div class="callout mb">${icon('info', 'sm')}<div>Offer do <b>khách hàng</b> gửi trực tiếp cho ứng viên qua email. Hệ thống chỉ ghi nhận kết quả và theo dõi đến khi ứng viên bắt đầu thử việc.</div></div>
         <form class="form-grid" novalidate>
         <div class="field full"><label>Kết quả <span class="req">*</span></label><div class="chip-group" id="kq">${['Chấp nhận offer', 'Từ chối offer'].map((t) => `<button type="button" class="chip" data-v="${t}">${t}</button>`).join('')}</div><input type="hidden" name="ket_qua"></div>
         <div id="acc" class="full form-grid" style="padding:0">${Form.field('Ngày nhận việc', 'ngay_nhan_viec', { type: 'date' })}${Form.field('Ngày khách hàng báo', 'ngay_khach_hang_bao', { type: 'date', req: true, value: todayStr() })}</div>
@@ -309,8 +340,8 @@ const Dlg = {
     const w = window.open('', '_blank'); if (!w) return toast('Trình duyệt chặn cửa sổ in — hãy cho phép pop-up.', 'warn');
     const rows = list.map((d, i) => { const hs = Q.hs(d.ma_ho_so_ung_vien); const uv = Q.uv(hs.ma_ung_vien); const ct = Q.ct(hs.ma_chi_tiet_du_an);
       return `<tr><td>${i + 1}</td><td>${esc(uv.ho_ten)}<br><small>${esc(uv.email)} · ${esc(uv.so_dien_thoai)}</small></td><td>${esc(ct.vi_tri)}<br><small>${esc(Q.khOfCt(ct).ten_cong_ty)}</small></td><td>${esc(d.dot_de_cu)}</td><td>${d.so_nam_kinh_nghiem ?? '—'}</td><td>${fmtMoney(d.muc_luong_mong_muon)}</td><td>${esc(d.notice_period || '')}</td><td>${esc(Q.ns(d.ma_nguoi_tao).ho_ten)}</td><td>${esc(d.trang_thai)}${d.phan_hoi_khach_hang ? '<br><small>' + esc(d.phan_hoi_khach_hang) + '</small>' : ''}</td><td>${esc(hs.trang_thai)}</td></tr>`; }).join('');
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Danh sách đề cử ứng viên</title><style>body{font-family:Inter,Arial,sans-serif;padding:24px;color:#0f172a}h2{margin:0}table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:left;vertical-align:top}th{background:#283583;color:#fff}small{color:#64748b}.head{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #22b4e6;padding-bottom:10px}</style></head><body>
-      <div class="head"><div><h2>DANH SÁCH ĐỀ CỬ ỨNG VIÊN</h2><div>Navigos Group Việt Nam — Navigos Search</div></div><div style="text-align:right;font-size:12px">Ngày in: ${fmtDT(new Date())}<br>Người in: ${esc(Auth.user.ho_ten)}</div></div>
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Danh sách đề cử ứng viên</title><style>@page{size:A4 landscape;margin:12mm}body{font-family:Inter,Arial,sans-serif;padding:0;margin:0;color:#0f172a}h2{margin:0}table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:left;vertical-align:top}th{background:#283583;color:#fff}small{color:#64748b}.head{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #22b4e6;padding-bottom:10px}</style></head><body>
+      <div class="head"><div><h2>DANH SÁCH ĐỀ CỬ ỨNG VIÊN</h2><div>Navigos Group Việt Nam — Talent Suite</div></div><div style="text-align:right;font-size:12px">Ngày in: ${fmtDT(new Date())}<br>Người in: ${esc(Auth.user.ho_ten)}</div></div>
       <table><thead><tr><th>#</th><th>Ứng viên</th><th>Vị trí / Khách hàng</th><th>Đợt</th><th>Năm KN</th><th>Lương mong muốn</th><th>Notice</th><th>Người đề cử</th><th>Trạng thái đề cử</th><th>Trạng thái hồ sơ</th></tr></thead><tbody>${rows}</tbody></table>
       <p style="font-size:12px;margin-top:14px">Tổng: ${list.length} đề cử · Đã duyệt/gửi: ${list.filter((d) => [ST.DC.DUYET, ST.DC.GUI].includes(d.trang_thai)).length} · KH đồng ý phỏng vấn: ${list.filter((d) => d.phan_hoi_khach_hang === 'Đồng ý phỏng vấn').length}</p>
       <script>window.onload=()=>window.print()<\/script></body></html>`);
@@ -327,7 +358,7 @@ const Dlg = {
         ${Form.field('Email', 'email', { type: 'email', req: true, value: k.email })}
         ${Form.field('Số điện thoại', 'so_dien_thoai', { req: true, value: k.so_dien_thoai })}
         ${Form.field('Địa chỉ', 'dia_chi', { value: k.dia_chi, full: true })}
-        ${id ? Form.field('Trạng thái hợp tác', 'trang_thai_hop_tac', { value: k.trang_thai_hop_tac, opts: ['Đang hợp tác', 'Ngừng hợp tác'], hint: 'Khách hàng đã có dự án không bị xóa — chuyển “Ngừng hợp tác” để giữ lịch sử (BR3-3).' }) : ''}</form>` });
+        ${id ? Form.field('Trạng thái hợp tác', 'trang_thai_hop_tac', { value: k.trang_thai_hop_tac, opts: ['Đang hợp tác', 'Ngừng hợp tác'], hint: 'Khách hàng đã có dự án không bị xóa — chuyển “Ngừng hợp tác” để giữ lịch sử.' }) : ''}</form>` });
     submitForm(m, (v) => { const r = Svc.saveCustomer(v, id); if (r.ok) doneThen(m, id ? 'Đã cập nhật khách hàng' : `Đã thêm khách hàng ${Code.kh(r.row.id)}`)(r); return r; });
   },
   /* ----- Tài khoản (UC_02) ----- */

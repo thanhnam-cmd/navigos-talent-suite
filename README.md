@@ -68,7 +68,8 @@ LDCoffe/
 │  └─ smoke-test.js          Kiểm thử API + MySQL
 ├─ docs/NGHIEP_VU.md         Nghiệp vụ, vòng đời ứng viên, kịch bản demo
 ├─ docs/FIX_DEMO_LAN1.md     Phân tích nhận xét khách hàng (Fix Demo lần 1) và cách xử lý
-└─ docs/TEST_DEMO_LAN2.md    Phân tích nhận xét khách hàng (Test demo lần 2) và cách xử lý
+├─ docs/TEST_DEMO_LAN2.md    Phân tích nhận xét khách hàng (Test demo lần 2) và cách xử lý
+└─ docs/FIX_DEMO_3.md        Phân tích nhận xét cuối (Fix demo 3): vai trò Phụ trách/Hỗ trợ, PDF, lỗi trùng lịch
 ```
 
 ## Kiến trúc

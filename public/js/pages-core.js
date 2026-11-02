@@ -5,7 +5,7 @@
 const Pages = {};
 const after = (r, okMsg, then) => { if (!r.ok) { if (r.errors) return r; toast(r.error, 'err'); return r; } if (okMsg) toast(okMsg); Store.save(); then ? then(r) : UI.refresh(); return r; };
 const kvOpts = () => Form.opts('khu_vuc', { blank: '— Chọn khu vực —' });
-const ctOpts = (filter = (c) => c.trang_thai === ST.CT.DANG) => [['', '— Chọn dự án (ID) —'], ...Q.visibleCts().filter(filter).map((c) => [c.id, `${Code.ct(c.id)} · ${c.vi_tri} — ${Q.khOfCt(c)?.ten_cong_ty}`])];
+const ctOpts = (filter = (c) => c.trang_thai === ST.CT.DANG) => [['', '— Chọn dự án (ID) —'], ...(Auth.isStaff() ? Q.handledCts() : Q.visibleCts()).filter(filter).map((c) => [c.id, `${Code.ct(c.id)} · ${c.vi_tri} — ${Q.khOfCt(c)?.ten_cong_ty}`])];
 
 /* ============ ĐĂNG NHẬP (UC_01) ============ */
 Pages.login = {
@@ -70,7 +70,7 @@ Pages.home = {
     const bySource = DB.kenh_dang_tuyen.filter((k) => k.loai !== 'noi_bo').map((k) => ({ label: k.ten_kenh.replace(' Website', ''), value: hs.filter((h) => DB.tin_dang.some((t) => t.ma_kenh === k.id && t.ma_tin_kenh === h.ma_tin_kenh)).length }));
     const byKh = Object.entries(groupBy(cts.filter((x) => !CT_CLOSED.includes(x.trang_thai)), (x) => Q.khOfCt(x).ten_cong_ty)).map(([k, l]) => ({ label: k.replace(/^(Công ty (CP|TNHH)|Ngân hàng TMCP) /, ''), value: l.length }));
     const alerts = cts.map((ct) => ({ ct, dl: Q.deadline(ct) })).filter((x) => x.dl).sort((a, b) => daysUntil(a.ct.han_hoan_thanh) - daysUntil(b.ct.han_hoan_thanh));
-    const todayIv = DB.lich_phong_van.filter((l) => l.trang_thai === ST.LICH.LEN && toDateStr(l.thoi_gian_bat_dau) === todayStr() && ctIds.has(Q.hs(l.ma_ho_so_ung_vien).ma_chi_tiet_du_an));
+    const todayIv = DB.lich_phong_van.filter((l) => l.trang_thai === ST.LICH.LEN && toDateStr(l.thoi_gian_bat_dau) === todayStr() && ctIds.has(Q.hs(l.ma_ho_so_ung_vien).ma_chi_tiet_du_an) && Q.lichVisible(l));
 
     // Việc cần làm theo vai trò
     const tasks = [];
@@ -78,17 +78,18 @@ Pages.home = {
       if (c.gopYMoi) tasks.push(['mail', 'tone-violet', `${c.gopYMoi} đề cử có góp ý mới của Ban Giám đốc`, '#/de-cu']);
       if (c.choPhanCong) tasks.push(['userCheck', 'tone-blue', `${c.choPhanCong} vị trí mới tiếp nhận chờ phân công`, '#/du-an?tab=phan-cong']);
       if (c.choDuyet) tasks.push(['send', 'tone-amber', `${c.choDuyet} đề cử chờ bạn duyệt`, '#/de-cu?tab=cho-duyet']);
+      Q.supportRequests().forEach((y) => tasks.push(['users', 'tone-red', `${Q.ns(y.ma_nguoi_gui).ho_ten} đề nghị bổ sung người hỗ trợ cho ${Q.ct(y.ma_chi_tiet_du_an).vi_tri}`, '#/du-an/' + y.ma_chi_tiet_du_an]));
     } else if (Auth.isStaff()) {
       const mine = DB.de_cu.filter((d) => d.ma_nguoi_tao === u.id);
       const sua = mine.filter((d) => d.trang_thai === ST.DC.SUA).length; const duyet = mine.filter((d) => d.trang_thai === ST.DC.DUYET).length;
       const choPh = mine.filter((d) => d.trang_thai === ST.DC.GUI && !d.phan_hoi_khach_hang).length;
       if (sua) tasks.push(['edit', 'tone-red', `${sua} đề cử cần chỉnh sửa theo yêu cầu Quản lý`, '#/de-cu?tab=can-sua']);
-      if (duyet) tasks.push(['send', 'tone-green', `${duyet} đề cử đã duyệt — sẵn sàng gửi khách hàng`, '#/de-cu?tab=da-duyet']);
-      if (choPh) tasks.push(['clock', 'tone-amber', `${choPh} đề cử đang chờ khách hàng phản hồi`, '#/de-cu?tab=da-gui']);
+      if (duyet) tasks.push(['send', 'tone-green', `${duyet} đề cử đã duyệt — sẵn sàng gửi khách hàng`, '#/de-cu?tab=cho-gui']);
+      if (choPh) tasks.push(['clock', 'tone-amber', `${choPh} đề cử đang chờ khách hàng phản hồi`, '#/de-cu?tab=cho-phan-hoi']);
     }
-    const pvNoResult = DB.lich_phong_van.filter((l) => l.trang_thai === ST.LICH.LEN && new Date(l.thoi_gian_ket_thuc) < now() && ctIds.has(Q.hs(l.ma_ho_so_ung_vien).ma_chi_tiet_du_an)).length;
-    if (Auth.canOperate() && pvNoResult) tasks.push(['checkCircle', 'tone-violet', `${pvNoResult} buổi phỏng vấn đã diễn ra chưa ghi nhận kết quả`, '#/phong-van?f=can-ket-qua']);
-    const waitHire = hs.filter((h) => h.trang_thai === ST.HS.PV && Q.lichOfHs(h.id).some((l) => Q.kqPv(l.id)?.ket_qua === 'Đạt') && !Q.kqTd(h.id)).length;
+    const pvNoResult = DB.lich_phong_van.filter((l) => l.trang_thai === ST.LICH.LEN && new Date(l.thoi_gian_ket_thuc) < now() && ctIds.has(Q.hs(l.ma_ho_so_ung_vien).ma_chi_tiet_du_an) && (!Auth.isStaff() || Q.canRecordIv(l))).length;
+    if (Auth.canOperate() && pvNoResult) tasks.push(['checkCircle', 'tone-violet', `${pvNoResult} buổi phỏng vấn đã diễn ra chưa ghi nhận kết quả`, '#/ket-qua?tab=chua']);
+    const waitHire = hs.filter((h) => !Auth.isStaff() || Q.canHandleCt(Q.ct(h.ma_chi_tiet_du_an))).filter((h) => h.trang_thai === ST.HS.PV && Q.lichOfHs(h.id).some((l) => Q.kqPv(l.id)?.ket_qua === 'Đạt') && !Q.kqTd(h.id)).length;
     if (Auth.canOperate() && waitHire) tasks.push(['userCheck', 'tone-green', `${waitHire} ứng viên đạt phỏng vấn chờ kết quả tuyển dụng từ khách hàng`, '#/ket-qua?tab=cho']);
     if (Auth.canOperate() && c.choGan) tasks.push(['inbox', 'tone-amber', `${c.choGan} hồ sơ apply chưa đối chiếu được dự án (chờ gán)`, '#/thu-thap?tab=cho-gan']);
     if (Auth.canOperate() && c.chuaChuanHoa) tasks.push(['tag', 'tone-sky', `${c.chuaChuanHoa} hồ sơ mới thu thập chưa chuẩn hóa & gắn thẻ`, '#/ung-vien?norm=no']);
@@ -126,7 +127,7 @@ Pages.home = {
           <a class="alert" href="#/tai-khoan" style="text-decoration:none;color:inherit"><span class="ico tone-blue">${icon('plus', 'sm')}</span><div><div class="tt">Thêm tài khoản cho nhân sự mới</div><div class="ds">Mật khẩu khởi tạo được sinh tự động & mã hóa</div></div></a>
           <a class="alert" href="#/tai-khoan" style="text-decoration:none;color:inherit"><span class="ico tone-violet">${icon('shield', 'sm')}</span><div><div class="tt">Phân quyền truy cập theo vai trò</div><div class="ds">Quản trị viên · Ban Giám đốc · Quản lý · Nhân viên</div></div></a>
           <a class="alert" href="#/danh-muc" style="text-decoration:none;color:inherit"><span class="ico tone-green">${icon('layers', 'sm')}</span><div><div class="tt">Danh mục dùng chung</div><div class="ds">Khu vực, lĩnh vực, cấp bậc, chuyên môn, kênh đăng tuyển</div></div></a>
-          <div class="callout">${icon('info', 'sm')}<div>Theo BR2-4, tài khoản đã phát sinh dữ liệu không bị xóa mà chuyển “Đã nghỉ việc” — tài khoản này không thể đăng nhập.</div></div>
+          <div class="callout">${icon('info', 'sm')}<div>Tài khoản đã phát sinh dữ liệu không bị xóa mà chuyển “Đã nghỉ việc” — tài khoản này không thể đăng nhập.</div></div>
         </div></div></div>`;
   },
 };
@@ -194,7 +195,7 @@ Pages.projects = {
           <td data-label="Khách hàng">${esc(kh.ten_cong_ty)}<div class="t-sub">${esc(Q.da(c.ma_du_an).ten_du_an)}</div></td>
           <td data-label="Hạn hoàn thành" class="nowrap">${fmtDate(c.han_hoan_thanh)}${dl ? `<div><span class="badge sm ${dl.level}">${dl.text}</span></div>` : ''}</td>
           <td data-label="Tiến độ" style="min-width:150px"><div class="prog-meta"><span>${pct}%</span><span>${h}/${c.so_luong} nhận việc</span></div>${progressBar(pct, pct >= 100 ? 'green' : dl?.level === 'red' ? 'red' : '')}</td>
-          <td data-label="Phụ trách">${asg.length ? asg.map((n) => `<span title="${esc(n.ho_ten)}">${avatar(n.ho_ten, 'sm')}</span>`).join(' ') : '<span class="muted small">Chưa phân công</span>'}</td>
+          <td data-label="Phụ trách">${asg.length ? asg.map((n) => `<span title="${esc(n.ho_ten)} — Phụ trách">${avatar(n.ho_ten, 'sm')}</span>`).join(' ') : '<span class="muted small">Chưa phân công</span>'}${Q.supporters(c.id).map((n) => `<span title="${esc(n.ho_ten)} — Hỗ trợ" style="opacity:.55">${avatar(n.ho_ten, 'sm')}</span>`).join(' ')}${Q.isSupport(c) ? '<div><span class="badge sm violet">Bạn: Hỗ trợ</span></div>' : ''}</td>
           <td data-label="Trạng thái">${badge(c.trang_thai)}</td></tr>`; }).join('') || `<tr><td colspan="8">${emptyState('Không có vị trí phù hợp bộ lọc')}</td></tr>`}
       </tbody></table></div>${pagerHtml(pg, 'vị trí')}</div>`;
     const re = () => { s.page = 1; this.positions(body, cts); };
@@ -215,7 +216,7 @@ Pages.projects = {
   },
   parents(body) {
     const das = this.visibleDas().sort((a, b) => b.ngay_tao.localeCompare(a.ngay_tao));
-    body.innerHTML = `<div class="card"><div class="table-wrap"><table class="table responsive"><thead><tr><th class="stt">STT</th><th>Dự án tuyển dụng</th><th>Khách hàng</th><th>Bắt đầu</th><th class="num">Vị trí</th><th class="num">Cần tuyển</th><th>Tiến độ (BR4-5)</th><th>Trạng thái</th></tr></thead><tbody>
+    body.innerHTML = `<div class="card"><div class="table-wrap"><table class="table responsive"><thead><tr><th class="stt">STT</th><th>Dự án tuyển dụng</th><th>Khách hàng</th><th>Bắt đầu</th><th class="num">Vị trí</th><th class="num">Cần tuyển</th><th>Tiến độ</th><th>Trạng thái</th></tr></thead><tbody>
       ${das.map((d, i) => { const cts = DB.chi_tiet_du_an.filter((c) => c.ma_du_an === d.id); return `<tr class="clickable" data-da="${d.id}">
         <td class="stt">${i + 1}</td>
         <td class="cell-main" data-label=""><div class="t-title">${esc(d.ten_du_an)}</div><div class="t-sub">${[Code.da(d.id), d.ghi_chu].filter(Boolean).map(esc).join(' · ')}</div></td>
@@ -227,7 +228,7 @@ Pages.projects = {
     $$('[data-da]', body).forEach((tr) => (tr.onclick = () => Dlg.parentDetail(Number(tr.dataset.da))));
   },
   assignQueue(body, list) {
-    body.innerHTML = list.length ? `<div class="callout mb">${icon('info', 'sm')}<div>Vị trí chỉ chuyển sang <b>Đang thực hiện</b> khi có ít nhất một nhân viên phụ trách (BR5-3). Hệ thống gợi ý nhân viên <b>cùng khu vực</b> với vị trí trước để thuận tiện đi cùng khách hàng phỏng vấn trực tiếp.</div></div>
+    body.innerHTML = list.length ? `<div class="callout mb">${icon('info', 'sm')}<div>Vị trí chỉ chuyển sang <b>Đang thực hiện</b> khi có ít nhất một nhân viên phụ trách. Hệ thống gợi ý nhân viên <b>cùng khu vực</b> với vị trí trước để thuận tiện đi cùng khách hàng phỏng vấn trực tiếp.</div></div>
       <div class="grid g-2">${list.map((c) => `<div class="card card-pad"><div class="row between"><div><div class="strong">${esc(c.vi_tri)}</div><div class="muted small">${Code.ct(c.id)} · ${esc(Q.khOfCt(c).ten_cong_ty)}</div></div>${badge(c.trang_thai)}</div>
         <dl class="kv mt-sm"><dt>Khu vực</dt><dd>${esc(Store.name('khu_vuc', c.ma_khu_vuc))}</dd><dt>Số lượng</dt><dd>${c.so_luong}</dd><dt>Hạn hoàn thành</dt><dd>${fmtDate(c.han_hoan_thanh)}</dd><dt>Tiếp nhận</dt><dd>${relTime(c.ngay_tao)} bởi ${esc(Q.ns(c.ma_nguoi_tao)?.ho_ten || '—')}</dd></dl>
         <div class="row mt-sm"><button class="btn primary sm" data-assign="${c.id}">${icon('userCheck', 'sm')} Phân công</button><a class="btn sm" href="#/du-an/${c.id}">Xem chi tiết</a></div></div>`).join('')}</div>`
@@ -241,8 +242,9 @@ Pages.projectDetail = {
   tab: 'kanban',
   render(v, { id }) {
     const ct = Q.ct(id); if (!ct) return (v.innerHTML = emptyState('Không tìm thấy dự án'));
-    if (!Q.canHandleCt(ct)) return (v.innerHTML = `<div class="card">${emptyState('Bạn không được phân công dự án này (BR4-6).', 'lock')}</div>`);
-    const da = Q.da(ct.ma_du_an); const kh = Q.kh(da.ma_khach_hang); const asg = Q.assignees(ct.id); const hired = Q.hired(ct.id); const pct = Math.min(100, Math.round((hired / ct.so_luong) * 100));
+    const sup = Q.isSupport(ct); // Fix demo 3: người hỗ trợ chỉ xem thông tin vị trí và buổi phỏng vấn của mình
+    if (!Q.canHandleCt(ct) && !sup) return (v.innerHTML = `<div class="card">${emptyState('Bạn không được phân công dự án này.', 'lock')}</div>`);
+    const da = Q.da(ct.ma_du_an); const kh = Q.kh(da.ma_khach_hang); const asg = Q.assignees(ct.id); const hts = Q.supporters(ct.id); const reqs = Auth.isQL() ? Q.supportRequests(ct.id) : []; const hired = Q.hired(ct.id); const pct = Math.min(100, Math.round((hired / ct.so_luong) * 100));
     const dl = Q.deadline(ct); const open = !CT_CLOSED.includes(ct.trang_thai);
     const hsList = Q.hsOfCt(ct.id); const col = (st) => hsList.filter((h) => h.trang_thai === st);
     const card = (h) => { const uv = Q.uv(h.ma_ung_vien); const dc = Q.latestDeCu(h.id); const lich = Q.lichOfHs(h.id).filter((l) => l.trang_thai !== ST.LICH.HUY).at(-1); const kq = lich && Q.kqPv(lich.id);
@@ -258,12 +260,15 @@ Pages.projectDetail = {
     v.innerHTML = `<div class="crumbs"><a href="#/du-an">Dự án tuyển dụng</a>${icon('chevronRight', 'sm')}<span>${esc(da.ten_du_an)}</span>${icon('chevronRight', 'sm')}<b>${esc(ct.vi_tri)}</b></div>
       <div class="page-head"><div><h1>${esc(ct.vi_tri)} ${badge(ct.trang_thai)}</h1><p class="sub">ID vị trí ${Code.ct(ct.id)} · ${esc(kh.ten_cong_ty)} ${dl ? `· <span class="badge ${dl.level}">${dl.text}</span>` : ''}</p></div>
         <div class="actions">
-          ${open && ct.trang_thai === ST.CT.DANG && Auth.canOperate() ? `<a class="btn outline-primary" href="#/ung-vien?ct=${ct.id}">${icon('filter', 'sm')} Lọc ứng viên</a>` : ''}
-          ${open && Auth.isQL() ? `<button class="btn" id="asg">${icon('userCheck', 'sm')} ${asg.length ? 'Đổi / thêm phụ trách' : 'Phân công'}</button>` : ''}
+          ${open && ct.trang_thai === ST.CT.DANG && Auth.canOperate() && !sup ? `<a class="btn outline-primary" href="#/ung-vien?ct=${ct.id}">${icon('filter', 'sm')} Lọc ứng viên</a>` : ''}
+          ${open && Auth.isQL() ? `<button class="btn" id="asg">${icon('userCheck', 'sm')} ${asg.length ? 'Phân công nhân sự' : 'Phân công'}</button>` : ''}
           ${open && Q.isCreator(ct) ? `<button class="btn" id="tin">${icon('link', 'sm')} Gắn mã tin đăng</button>` : ''}
           ${open && Q.isCreator(ct) ? `<button class="btn" id="more">${icon('more', 'sm')} Thao tác</button>` : ''}
         </div></div>
       ${ct.trang_thai === ST.CT.MOI ? `<div class="callout amber mb">${icon('alert', 'sm')}<div>Vị trí <b>mới tiếp nhận</b>, chưa có nhân viên phụ trách. ${Auth.isQL() ? 'Hãy phân công để bắt đầu thực hiện.' : 'Chờ Quản lý phân công.'}</div></div>` : ''}
+      ${sup ? `<div class="callout mb">${icon('users', 'sm')}<div>Bạn tham gia vị trí này với vai trò <b>Hỗ trợ</b>: xem thông tin vị trí, lịch và hồ sơ ứng viên mình phỏng vấn, ghi nhận kết quả buổi mình tham gia.</div></div>` : ''}
+      ${reqs.map((y) => `<div class="callout amber mb">${icon('users', 'sm')}<div style="flex:1"><b>${esc(Q.ns(y.ma_nguoi_gui).ho_ten)}</b> đề nghị bổ sung người hỗ trợ (${fmtDT(y.ngay_gui)}): ${esc(y.noi_dung)}
+        <div class="row mt-sm" style="gap:6px"><button class="btn xs primary" data-yc-asg>${icon('userCheck', 'sm')} Phân công người hỗ trợ</button><button class="btn xs" data-yc-close="${y.id}">Không cần bổ sung</button></div></div></div>`).join('')}
       ${ct.ly_do_dong_huy ? `<div class="callout red mb">${icon('info', 'sm')}<div><b>${ct.trang_thai}</b> — Lý do: ${esc(ct.ly_do_dong_huy)}</div></div>` : ''}
       <div class="grid g-side">
         <div class="card"><div class="card-head" style="padding-bottom:4px"><h3 style="color:var(--primary)">${icon('briefcase')} Thông tin dự án</h3></div><div class="card-body info-list">
@@ -275,13 +280,18 @@ Pages.projectDetail = {
           <div class="grid g-2" style="gap:10px"><div class="it"><label>Chuyên môn</label><div class="v">${esc(Store.name('chuyen_mon', ct.ma_chuyen_mon))}</div></div><div class="it"><label>Hình thức</label><div class="v">${esc(ct.hinh_thuc)}</div></div></div>
           <div class="it"><label>Mức lương tối đa</label><div class="v">${fmtMoney(ct.muc_luong_toi_da)}</div></div>
           <div class="it"><label>Nhân sự phụ trách</label><div class="v" style="display:block">${asg.length ? asg.map((n) => `<div class="person" style="margin:4px 0">${avatar(n.ho_ten, 'sm')}<div><div class="nm small">${esc(n.ho_ten)}</div><div class="sb">${esc(n.chuc_vu)} · ${esc(Store.name('khu_vuc', n.ma_khu_vuc))}</div></div></div>`).join('') : '<span class="muted">Chưa phân công</span>'}</div></div>
+          ${hts.length ? `<div class="it"><label>Nhân sự hỗ trợ (phỏng vấn)</label><div class="v" style="display:block">${hts.map((n) => `<div class="person" style="margin:4px 0">${avatar(n.ho_ten, 'sm')}<div><div class="nm small">${esc(n.ho_ten)} <span class="badge sm violet">Hỗ trợ</span></div><div class="sb">${esc(n.chuc_vu)} · ${esc(Store.name('khu_vuc', n.ma_khu_vuc))}</div></div></div>`).join('')}</div></div>` : ''}
           <div class="it"><label>Mô tả công việc</label><div class="v" style="display:block;font-size:13px;color:var(--text-2)">${esc(ct.mo_ta_cong_viec || '—')}</div></div>
           <div class="it"><label>Tin đăng (mã tin)</label><div class="v" style="display:block">${DB.tin_dang.filter((t) => t.ma_chi_tiet_du_an === ct.id).map((t) => `<div class="row between small" style="margin:3px 0"><span><span class="code">${esc(t.ma_tin_kenh)}</span> ${esc(Store.get('kenh_dang_tuyen', t.ma_kenh).ten_kenh)}</span>${badge(t.trang_thai, 'sm')}</div>`).join('') || '<span class="muted small">Chưa gắn mã tin — hồ sơ apply sẽ vào danh sách chờ gán</span>'}</div></div>
         </div></div>
-        <div>
+        ${sup ? `<div><h3 class="mb" style="font-size:16px">Lịch phỏng vấn của tôi tại vị trí này</h3>${DB.lich_phong_van.filter((l) => Q.hs(l.ma_ho_so_ung_vien).ma_chi_tiet_du_an === ct.id && l.ma_nhan_su === Auth.user.id).sort((a, b) => b.thoi_gian_bat_dau.localeCompare(a.thoi_gian_bat_dau)).map((l) => Comp.ivCard(l)).join('') || `<div class="card">${emptyState('Bạn chưa được xếp buổi phỏng vấn nào ở vị trí này', 'calendar')}</div>`}</div></div>` : `<div>
           <div class="tabs">${[['kanban', 'Quy trình ứng viên'], ['decu', `Danh sách đề cử (${DB.de_cu.filter((d) => hsList.some((h) => h.id === d.ma_ho_so_ung_vien)).length})`], ['phancong', 'Lịch sử phân công']].map(([k, l]) => `<button data-t="${k}" class="${this.tab === k ? 'active' : ''}">${l}</button>`).join('')}</div>
           <div id="pdBody"></div>
-        </div></div>`;
+        </div></div>`}`;
+    $('#asg') && ($('#asg').onclick = () => Dlg.assign(ct.id));
+    $$('[data-yc-asg]', v).forEach((b) => (b.onclick = () => Dlg.assign(ct.id)));
+    $$('[data-yc-close]', v).forEach((b) => (b.onclick = () => after(Svc.closeSupportRequest(Number(b.dataset.ycClose)), 'Đã đóng đề nghị')));
+    if (sup) return Comp.bindIv(v);
     const body = $('#pdBody');
     if (this.tab === 'kanban') {
       body.innerHTML = `<div class="kanban">
@@ -291,9 +301,8 @@ Pages.projectDetail = {
         <div class="card-body">${rejected.length ? `<div class="reject-strip">${rejected.map((h) => { const uv = Q.uv(h.ma_ung_vien); const last = Q.history(h.id).at(-1); return `<div class="kcard" data-hs="${h.id}"><div class="nm">${esc(uv.ho_ten)}</div><div class="meta">${esc(uv.so_dien_thoai)}</div><div class="meta" style="color:var(--red)">${esc((last?.ghi_chu || '').slice(0, 70))}</div></div>`; }).join('')}</div>` : '<span class="muted small">Chưa có</span>'}</div></div>`;
       $$('[data-hs]', body).forEach((c) => (c.onclick = () => Comp.hsDrawer(Number(c.dataset.hs))));
     } else if (this.tab === 'decu') Comp.recTable(body, DB.de_cu.filter((d) => hsList.some((h) => h.id === d.ma_ho_so_ung_vien)), { showCt: false, tab: 'tat-ca' });
-    else body.innerHTML = `<div class="card"><div class="table-wrap"><table class="table responsive"><thead><tr><th>Nhân viên</th><th>Khu vực</th><th>Ngày phân công</th><th>Trạng thái</th></tr></thead><tbody>${DB.phan_cong.filter((p) => p.ma_chi_tiet_du_an === ct.id).map((p) => { const n = Q.ns(p.ma_nhan_su); return `<tr><td class="cell-main"><div class="person">${avatar(n.ho_ten, 'sm')}<div class="nm">${esc(n.ho_ten)}</div></div></td><td data-label="Khu vực">${esc(Store.name('khu_vuc', n.ma_khu_vuc))}</td><td data-label="Ngày phân công">${fmtDT(p.ngay_phan_cong)}</td><td data-label="Trạng thái">${badge(p.trang_thai)}</td></tr>`; }).join('') || `<tr><td colspan="4">${emptyState('Chưa có phân công')}</td></tr>`}</tbody></table></div></div>`;
+    else body.innerHTML = `<div class="card"><div class="table-wrap"><table class="table responsive"><thead><tr><th>Nhân viên</th><th>Vai trò</th><th>Khu vực</th><th>Ngày phân công</th><th>Trạng thái</th></tr></thead><tbody>${DB.phan_cong.filter((p) => p.ma_chi_tiet_du_an === ct.id).map((p) => { const n = Q.ns(p.ma_nhan_su); return `<tr><td class="cell-main"><div class="person">${avatar(n.ho_ten, 'sm')}<div class="nm">${esc(n.ho_ten)}</div></div></td><td data-label="Vai trò"><span class="badge sm ${(p.vai_tro || PC_ROLE.PT) === PC_ROLE.HT ? 'violet' : 'blue'}">${esc(p.vai_tro || PC_ROLE.PT)}</span></td><td data-label="Khu vực">${esc(Store.name('khu_vuc', n.ma_khu_vuc))}</td><td data-label="Ngày phân công">${fmtDT(p.ngay_phan_cong)}</td><td data-label="Trạng thái">${badge(p.trang_thai)}</td></tr>`; }).join('') || `<tr><td colspan="5">${emptyState('Chưa có phân công')}</td></tr>`}</tbody></table></div></div>`;
     $$('[data-t]', v).forEach((b) => (b.onclick = () => { this.tab = b.dataset.t; UI.refresh(); }));
-    $('#asg') && ($('#asg').onclick = () => Dlg.assign(ct.id));
     $('#tin') && ($('#tin').onclick = () => Dlg.posting(ct.id));
     $('#more') && ($('#more').onclick = (e) => {
       e.stopPropagation(); $$('.dropdown').forEach((d) => d.remove());
@@ -378,7 +387,7 @@ const Comp = {
         a('remove', () => confirmBox({ title: 'Gỡ ứng viên khỏi danh sách đề cử', message: 'Đề cử chuyển “Đã gỡ”, hồ sơ trở về trạng thái trước đó và được ghi lịch sử.', okText: 'Gỡ ứng viên', onOk: () => { const r = Svc.removeRecommendation(lastDc.id); r.ok ? (toast('Đã gỡ khỏi danh sách'), reopen()) : toast(r.error, 'err'); } }));
         a('reject', () => confirmBox({ title: 'Loại hồ sơ', danger: true, okText: 'Loại hồ sơ', message: 'Hồ sơ chuyển “Bị loại”. Đề cử chưa gửi được gỡ, lịch phỏng vấn sắp tới bị hủy.', input: { label: 'Lý do loại', required: true }, onOk: (r) => { const x = Svc.manualStatus(hs.id, ST.HS.LOAI, r); x.ok ? (toast('Đã loại hồ sơ'), reopen()) : (toast(x.error, 'err'), false); } }));
         a('assignct', () => Dlg.assignPending(hs.id, reopen));
-        mm.$$('[data-fb]').forEach((b) => (b.onclick = () => confirmBox({ title: 'Thêm feedback của khách hàng', okText: 'Lưu feedback', message: 'Một lịch phỏng vấn có thể có nhiều feedback (BR11-1).', input: { label: 'Nội dung feedback', required: true }, onOk: (t) => { Svc.addFeedback(b.dataset.fb, t); toast('Đã lưu feedback'); reopen(); } })));
+        mm.$$('[data-fb]').forEach((b) => (b.onclick = () => confirmBox({ title: 'Thêm feedback của khách hàng', okText: 'Lưu feedback', message: 'Một lịch phỏng vấn có thể có nhiều feedback.', input: { label: 'Nội dung feedback', required: true }, onOk: (t) => { Svc.addFeedback(b.dataset.fb, t); toast('Đã lưu feedback'); reopen(); } })));
       },
     });
     return m;
@@ -450,16 +459,17 @@ const Comp = {
   ivCard(l) {
     const hs = Q.hs(l.ma_ho_so_ung_vien); const uv = Q.uv(hs.ma_ung_vien); const ct = Q.ct(hs.ma_chi_tiet_du_an); const k = Q.kqPv(l.id); const ns = Q.ns(l.ma_nhan_su);
     const past = new Date(l.thoi_gian_ket_thuc) < now();
-    const op = Auth.canOperate() && Q.canHandleCt(ct);
-    const actions = op
-      ? `<button class="btn xs" data-ivhs="${hs.id}">Mở hồ sơ</button>${l.trang_thai === ST.LICH.LEN ? `${past ? `<button class="btn xs primary" data-ivres="${l.id}">${icon('checkCircle', 'sm')} Ghi nhận kết quả</button>` : ''}<button class="btn xs" data-ivedit="${l.id}">${icon('edit', 'sm')} Sửa</button><button class="btn xs" data-ivcancel="${l.id}" style="color:var(--red)">Hủy lịch</button>` : ''}`
+    const op = Auth.canOperate() && Q.canHandleCt(ct); const rec = Auth.canOperate() && Q.canRecordIv(l);
+    const actions = op || rec
+      ? `<button class="btn xs" data-ivhs="${hs.id}">Mở hồ sơ</button>${l.trang_thai === ST.LICH.LEN ? `${past ? `<button class="btn xs primary" data-ivres="${l.id}">${icon('checkCircle', 'sm')} Ghi nhận kết quả</button>` : ''}${op ? `<button class="btn xs" data-ivedit="${l.id}">${icon('edit', 'sm')} Sửa</button><button class="btn xs" data-ivcancel="${l.id}" style="color:var(--red)">Hủy lịch</button>` : ''}` : ''}${!op ? `<button class="btn xs" data-ivview="${l.id}">${icon('eye', 'sm')} Xem chi tiết</button>` : ''}`
       : `<button class="btn xs" data-ivview="${l.id}">${icon('eye', 'sm')} Xem chi tiết phỏng vấn</button>`;
     return `<div class="iv ${l.trang_thai === ST.LICH.XONG ? 'done' : l.trang_thai === ST.LICH.HUY ? 'cancel' : ''}">
       <div class="when"><div class="t">${icon('clock', 'sm')} ${fmtTime(l.thoi_gian_bat_dau)} - ${fmtTime(l.thoi_gian_ket_thuc)}</div><div class="muted small">${icon('calendar', 'sm')} ${fmtDate(l.thoi_gian_bat_dau)} · Vòng ${l.vong}</div></div>
       <div class="body"><div class="row between" style="align-items:flex-start"><div class="person">${avatar(uv.ho_ten)}<div><div class="nm" style="font-size:15px">${esc(uv.ho_ten)}</div><div class="sb">${esc(ct.vi_tri)} — ${esc(Q.khOfCt(ct).ten_cong_ty)}</div><div class="sb">ID vị trí: ${Code.ct(ct.id)}</div></div></div>
         <div class="row" style="gap:6px">${k ? badge(k.ket_qua) : badge(l.trang_thai === ST.LICH.LEN && past ? 'Chờ ghi nhận kết quả' : l.trang_thai, l.trang_thai === ST.LICH.LEN && past ? 'amber' : '')}</div></div>
         <div class="foot"><div><label>${icon(l.hinh_thuc === 'Trực tuyến' ? 'video' : 'pin', 'sm')} ${l.hinh_thuc === 'Trực tuyến' ? 'Họp trực tuyến' : 'Địa điểm trực tiếp'}</label>${l.hinh_thuc === 'Trực tuyến' ? `<a href="${esc(l.dia_diem_link)}" target="_blank" rel="noopener">${esc(l.dia_diem_link)}</a>` : esc(l.dia_diem_link)}</div>
-          <div><label>${icon('users', 'sm')} Nhân viên phỏng vấn</label>${esc(ns.ho_ten)} <span class="muted small">(${esc(Store.name('khu_vuc', ns.ma_khu_vuc))})</span></div></div>
+          <div><label>${icon('users', 'sm')} Nhân viên phỏng vấn</label>${esc(ns.ho_ten)} <span class="muted small">(${esc(Store.name('khu_vuc', ns.ma_khu_vuc))}${Q.supporters(ct.id).some((n) => n.id === ns.id) ? ' · Hỗ trợ' : ''})</span></div></div>
+        ${l.trang_thai === ST.LICH.HUY && l.ly_do_huy ? `<div class="small mt-sm" style="color:var(--red)">${icon('info', 'sm')} Lý do hủy: ${esc(l.ly_do_huy)}</div>` : ''}${l.ghi_chu ? `<div class="small mt-sm t2">${icon('mail', 'sm')} Yêu cầu của khách hàng: ${esc(l.ghi_chu)}</div>` : ''}
         <div class="row mt-sm" style="gap:6px">${actions}</div></div></div>`;
   },
   bindIv(root) {

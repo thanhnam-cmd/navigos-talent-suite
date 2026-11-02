@@ -63,7 +63,7 @@ const Seed = (() => {
     const pw = hashPw('123456');
     const NS = (ho_ten, ten_dang_nhap, vai_tro, chuc_vu, kv, email, tt = 'Đang làm việc') => ins('nhan_su', { ho_ten, ten_dang_nhap, mat_khau: pw, email, so_dien_thoai: '09' + int(10000000, 99999999), chuc_vu, vai_tro, ma_khu_vuc: kv, trang_thai_lam_viec: tt });
     const admin = NS('Nguyễn Quản Trị', 'admin', ROLES.ADMIN, 'Chuyên viên IT', 1, 'admin@navigosgroup.com');
-    const gd = NS('Trần Minh Đức', 'giamdoc', ROLES.BGD, 'Giám đốc Navigos Search', 1, 'duc.tran@navigosgroup.com');
+    const gd = NS('Trần Minh Đức', 'giamdoc', ROLES.BGD, 'Giám đốc Navigos Group Việt Nam', 1, 'duc.tran@navigosgroup.com');
     const tn = NS('Dương Kim Chi', 'quanly', ROLES.QL, 'Quản lý tư vấn tuyển dụng', 1, 'chi.duong@navigosgroup.com');
     const tram = NS('Đào Bích Trâm', 'nhanvien', ROLES.NV, 'Senior Consultant', 1, 'tram.dao@navigosgroup.com');
     const ha = NS('Phạm Thu Hà', 'thuha', ROLES.NV, 'Consultant', 1, 'ha.pham@navigosgroup.com');
@@ -223,6 +223,10 @@ const Seed = (() => {
     const ct12 = position(da7, { ago: 38, due: 8, vi_tri: 'Brand Manager', mo_ta: 'Quản lý thương hiệu ngành hàng thực phẩm.', sl: 1, luong: 45000000, cb: 4, cm: 4, kv: 2, staff: [tam], kenh: [vnw, lkd] });
     const ct13 = position(da7, { ago: 11, due: 18, vi_tri: 'Digital Marketing Executive', mo_ta: 'Triển khai chiến dịch digital, Facebook Ads, SEO.', sl: 2, luong: 18000000, cb: 2, cm: 4, kv: 2, staff: [tam], kenh: [topcv] });
 
+    // Fix demo 3: nhân viên vai trò Hỗ trợ — chỉ tham gia phỏng vấn và ghi nhận kết quả buổi mình phỏng vấn
+    Auth.user = tn;
+    [[ct1, ha, 40], [ct9, ha, 15], [ct3, tam, 50], [ct12, phuc, 36]].forEach(([ct, n, ago]) => { at(ago, 11); Svc.assign(ct.id, [n.id], false, { [n.id]: PC_ROLE.HT }); });
+
     /* --- Chạy quy trình cho từng vị trí --- */
     run(ct5, { tv: 1, loai_kh: 2 }, 55, 2);
     run(ct12, { tv: 1, pv_khong: 1 }, 35, 3);
@@ -241,6 +245,11 @@ const Seed = (() => {
     Auth.user = gd; at(3, 15);
     const dcLong = DB.de_cu.filter((d) => Q.hs(d.ma_ho_so_ung_vien).ma_ung_vien === long.id && d.trang_thai === ST.DC.DUYET).at(-1);
     if (dcLong) Svc.addRecommendationComment(dcLong.id, 'Ứng viên đang ở vòng phỏng vấn cuối của FinNext — đề nghị Quản lý xác nhận nguyện vọng trước khi gửi khách hàng Ánh Dương AI để tránh trùng offer.');
+
+    // Một buổi sắp tới do người hỗ trợ (Phạm Thu Hà) phỏng vấn — minh họa màn hình của vai trò Hỗ trợ
+    const lSup = DB.lich_phong_van.find((l) => Q.hs(l.ma_ho_so_ung_vien).ma_chi_tiet_du_an === ct1.id && l.trang_thai === ST.LICH.LEN && !Q.kqPv(l.id));
+    if (lSup && !Q.scheduleCheck({ nsId: ha.id, bd: new Date(lSup.thoi_gian_bat_dau), kt: new Date(lSup.thoi_gian_ket_thuc), hinh_thuc: lSup.hinh_thuc, ctId: ct1.id, exceptId: lSup.id }).conflicts.length)
+      Object.assign(lSup, { ma_nhan_su: ha.id, nguoi_tham_gia_cong_ty: `${ha.ho_ten} (Navigos)` });
 
     /* --- Hồ sơ cào về gần đây: vài hồ sơ chờ gán (mã tin không khớp), vài hồ sơ chưa chuẩn hóa --- */
     Auth.user = null; at(1, 7);
