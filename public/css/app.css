@@ -379,10 +379,6 @@ table.table { width: 100%; border-collapse: collapse; }
 .login-card .logo { display: block; height: 58px; margin: 0 auto 12px; }
 .login-card h1 { text-align: center; font-size: 24px; }
 .login-card .lead { text-align: center; color: var(--text-2); margin: 6px 0 24px; }
-.demo-accounts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.demo-accounts button { text-align: left; border: 1px solid var(--border); background: #fff; border-radius: 10px; padding: 8px 10px; cursor: pointer; font-size: 12px; }
-.demo-accounts button:hover { border-color: var(--primary); background: var(--primary-50); }
-.demo-accounts b { display: block; font-size: 13px; }
 .divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .08em; margin: 20px 0 12px; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 
@@ -542,3 +538,59 @@ table.table { width: 100%; border-collapse: collapse; }
 
 /* Báo cáo trên màn hình: dòng tổng cộng (Test demo lần 2) */
 .table tr.total td { background: var(--primary-50); font-weight: 700; border-top: 1px solid var(--primary-100); }
+
+/* ---------- Fix demo 3 (2) ---------- */
+.input-ico .pw-eye { position: absolute; right: 6px; top: 5px; width: 32px; height: 30px; border: 0; background: transparent; border-radius: 8px; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.input-ico .pw-eye svg { position: static; }
+.input-ico .pw-eye:hover { background: var(--slate-50); color: var(--text); }
+.input-ico input[name=p] { padding-right: 44px; }
+.icon-btn.xs { width: 22px; height: 22px; border-radius: 6px; display: inline-grid; vertical-align: middle; color: var(--primary); }
+button.fit { border: 0; background: transparent; padding: 0; cursor: pointer; }
+button.fit:hover .ring { box-shadow: 0 0 0 2px var(--primary-100); }
+/* Báo cáo: cách tính kỳ báo cáo, dòng dự án mở rộng xem vị trí */
+.rp-hint { display: flex; gap: 8px; align-items: flex-start; padding: 0 14px 12px; font-size: 12px; color: var(--text-2); }
+.rp-hint svg { flex: none; margin-top: 1px; color: var(--primary); }
+.rp-screen tr.grp { cursor: pointer; }
+.rp-screen tr.grp:hover td { background: var(--slate-50); }
+.rp-screen .chev { display: inline-flex; vertical-align: middle; margin-right: 2px; color: var(--muted); transition: transform .15s; }
+.rp-screen tr.grp.open .chev { transform: rotate(90deg); color: var(--primary); }
+.rp-screen tr.kid td { background: #f8faff; font-size: 12.5px; }
+.rp-screen tr.kid td:nth-child(2) { padding-left: 22px; }
+.rp-screen tr.kid-head td, .rp-table tr.kid-head td { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--primary); padding-top: 6px; padding-bottom: 6px; }
+.rp-table tr.grp td { font-weight: 600; background: #f6f8fc; }
+.rp-table tr.kid td { font-size: 11px; } .rp-table tr.kid td:nth-child(2) { padding-left: 18px; }
+.mini-prog { display: flex; align-items: center; gap: 8px; justify-content: flex-end; white-space: nowrap; }
+.mini-prog span { width: 56px; height: 6px; border-radius: 4px; background: var(--slate-100, #eef1f6); overflow: hidden; display: block; }
+.mini-prog i { display: block; height: 100%; background: var(--primary); border-radius: 4px; }
+/* Gửi đề cử cho khách hàng */
+.send-form { display: grid; gap: 10px; }
+.send-co { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: var(--surface-2, #f8fafc); }
+.send-kv { display: grid; grid-template-columns: 96px 1fr 72px 1fr; gap: 4px 10px; margin: 8px 0 0; font-size: 12.5px; }
+.send-kv dt { color: var(--muted); } .send-kv dd { margin: 0; font-weight: 600; }
+.send-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-top: 4px; }
+.send-sec .muted { font-weight: 500; letter-spacing: 0; text-transform: none; }
+.send-list { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.send-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.send-row:last-child { border-bottom: 0; } .send-row .person { flex: 1; min-width: 0; }
+.file-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 3px 8px; border-radius: 7px; border: 1px solid; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.file-chip.pdf { color: #c2410c; border-color: #fed7aa; background: #fff7ed; }
+.file-chip.xls { color: #15803d; border-color: #bbf7d0; background: #f0fdf4; }
+.file-chip.sheet { color: #0f766e; border-color: #99f6e4; background: #f0fdfa; }
+.file-chip.none { color: var(--muted); border-color: var(--border); background: transparent; font-weight: 500; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--primary); }
+.att-opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
+.att-opt.on { border-color: var(--primary); background: var(--primary-50); }
+.att-opt input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--primary); margin-top: 1px; flex: none; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #fff; }
+.seg button { border: 0; background: transparent; font-size: 11.5px; font-weight: 600; padding: 3px 10px; cursor: pointer; color: var(--text-2); }
+.seg button.on { background: var(--primary); color: #fff; }
+.cv-sheet { border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.cv-head { display: flex; gap: 14px; align-items: center; } .cv-head h2 { margin: 0; font-size: 20px; }
+@media (max-width: 720px) { .send-kv { grid-template-columns: 90px 1fr; } .send-row { flex-wrap: wrap; } }
+.rp-screen td:nth-child(2) { min-width: 210px; } .rp-screen td:nth-child(4) { min-width: 130px; }
+.rp-screen td, .rp-screen th { padding-left: 10px; padding-right: 10px; }
+/* Bảng báo cáo nhiều cột khi in (A4 dọc): chữ nhỏ, cột tên rộng hơn */
+.rp-kpis.n5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.rp-table.wide { font-size: 10.5px; } .rp-table.wide th { padding: 6px 4px; } .rp-table.wide td { padding: 5px 4px; }
+.rp-table.wide td:nth-child(2) { min-width: 120px; } .rp-table.wide .t-sub { font-size: 9.5px; }
+.rp-table.wide tr.kid td { font-size: 10px; }

@@ -57,7 +57,7 @@ Pages.interviews = {
     $('#add') && ($('#add').onclick = () => {
       const mine = new Set(Q.handledCts().map((c) => c.id));
       const ready = DB.ho_so_ung_tuyen.filter((h) => mine.has(h.ma_chi_tiet_du_an) && Q.canSchedule(h));
-      if (!ready.length) return toast('Chưa có hồ sơ nào được khách hàng đồng ý phỏng vấn hoặc đang trong vòng phỏng vấn.', 'warn');
+      if (!ready.length) return toast('Chưa có hồ sơ sẵn sàng lên lịch: khách hàng đồng ý phỏng vấn, hoặc đã phỏng vấn xong và cần thêm buổi.', 'warn');
       Dlg.pickHsForInterview(ready);
     });
   },
@@ -263,7 +263,8 @@ Pages.reports = {
       <div class="card no-print mb"><form class="filter-panel" style="padding:14px;grid-template-columns:repeat(5,minmax(0,1fr))" id="rf" onsubmit="return false">
         ${Form.field('Từ ngày', 'from', { type: 'date', value: f.from })}${Form.field('Đến ngày', 'to', { type: 'date', value: f.to })}
         ${Form.field('Khách hàng', 'kh', { opts: Form.opts('khach_hang', { blank: 'Tất cả' }), value: f.kh })}${Form.field('Vị trí', 'vt', { value: f.vt, ph: 'Từ khóa vị trí' })}
-        ${Form.field('Nhân viên', 'ns', { opts: [['', 'Tất cả'], ...DB.nhan_su.filter((n) => n.vai_tro === ROLES.NV).map((n) => [n.id, n.ho_ten])], value: f.ns })}</form></div>
+        ${Form.field('Nhân viên', 'ns', { opts: [['', 'Tất cả'], ...DB.nhan_su.filter((n) => n.vai_tro === ROLES.NV).map((n) => [n.id, n.ho_ten])], value: f.ns })}</form>
+        <div class="rp-hint">${icon('info', 'sm')}<span>${this.HINT[this.type]}</span></div></div>
       <div id="rbody"></div>`;
     if (innerWidth <= 720) $('#rf').style.gridTemplateColumns = '1fr 1fr';
     $$('[data-type]', v).forEach((b) => (b.onclick = () => { this.type = b.dataset.type; UI.refresh(); }));
@@ -272,10 +273,19 @@ Pages.reports = {
     $('#xls').onclick = () => { const x = this._export; if (!x || !x.rows.length) return toast('Không có dữ liệu để xuất', 'warn'); Export.excel(`${this.code()}`, t[1], x.headers, x.rows); };
     this.body();
   },
+  /** Cách áp dụng "Từ ngày – Đến ngày" cho từng loại báo cáo */
+  HINT: {
+    'tien-do': 'Kỳ báo cáo lấy các vị trí có thời gian tuyển dụng (ngày tiếp nhận → hạn hoàn thành) nằm trong kỳ. Nhận việc và tiến độ tính lũy kế đến ngày cuối kỳ; đề cử, phỏng vấn tính số phát sinh trong kỳ.',
+    'tre-han': 'Tính đến ngày cuối kỳ (không vượt quá hôm nay): vị trí đã qua hạn hoàn thành mà chưa tuyển đủ chỉ tiêu, không gồm vị trí Đã đóng / Đã hủy.',
+    'khach-hang': 'Kỳ báo cáo lấy các vị trí có thời gian tuyển dụng (ngày tiếp nhận → hạn hoàn thành) nằm trong kỳ, gom theo khách hàng.',
+    'ket-qua': 'Kỳ báo cáo tính theo ngày khách hàng báo kết quả tuyển dụng.',
+    'chuyen-doi': 'Kỳ báo cáo tính theo ngày hồ sơ apply; mỗi hồ sơ được đếm ở mọi trạng thái từng đạt tới.',
+    'hieu-suat': 'Kỳ báo cáo tính đề cử theo ngày tạo và phỏng vấn theo ngày diễn ra.',
+  },
   code() { const t = this.TYPES.find((x) => x[0] === this.type); return `BC-${t[3]}-${todayStr().replace(/-/g, '')}-01`; },
   /** Khung báo cáo theo mẫu: tiêu đề công ty, mã báo cáo, kỳ, đơn vị / phạm vi / người lập / đối tượng,
       I. Tổng quan (ô KPI), II. Bảng chi tiết có STT + Tổng cộng, Ghi chú, chữ ký. */
-  doc({ kpis, secTitle, headers, rows, total, notes, doiTuong }) {
+  doc({ kpis, secTitle, headers, rows, total, notes, doiTuong, count }) {
     const f = this.f; const t = this.TYPES.find((x) => x[0] === this.type); const u = Auth.user; const d = new Date(now());
     const ky = f.from || f.to ? `từ ${f.from ? fmtDate(f.from) : 'đầu kỳ'} đến ${fmtDate(f.to || d)}` : `toàn bộ thời gian, tính đến ${fmtDate(d)}`;
     const scope = [f.kh && Q.kh(f.kh)?.ten_cong_ty, f.vt && `vị trí chứa “${f.vt}”`, f.ns && `nhân viên ${Q.ns(f.ns)?.ho_ten}`].filter(Boolean);
@@ -283,11 +293,16 @@ Pages.reports = {
     const cell = (c, i) => `<td class="${/^[\d.,%–\s]*$/.test(String(c)) || /^<button/.test(String(c)) ? 'c' : ''}${np(i)}">${c}</td>`;
     const place = /hồ chí minh|hcm/i.test(Store.name('khu_vuc', u.ma_khu_vuc)) ? 'TP. Hồ Chí Minh' : 'Hà Nội';
     const numCls = (c) => (/^[\d.,%–\s]*$/.test(String(c)) ? 'num' : '');
+    const cellsOf = (r) => r.cells || r; const first = rows.length ? cellsOf(rows[0]) : [];
+    const sCell = (c, j) => `<td class="${numCls(c)}">${headers[j] === 'Trạng thái' && c ? badge(c) : headers[j] === 'Tiến độ' && /%$/.test(c) ? `<div class="mini-prog"><span><i style="width:${Math.min(100, parseFloat(c) || 0)}%"></i></span>${c}</div>` : c}</td>`;
+    const sRow = (r, i) => !r.cells ? `<tr><td class="stt">${i + 1}</td>${r.map(sCell).join('')}</tr>`
+      : `<tr class="grp" data-grp="${i}"><td class="stt"><span class="chev">${icon('chevronRight', 'sm')}</span>${i + 1}</td>${r.cells.map(sCell).join('')}</tr>
+        <tr class="kid kid-${i} kid-head" hidden><td></td><td colspan="${headers.length}">${r.childTitle}</td></tr>${r.children.map((c) => `<tr class="kid kid-${i}" hidden><td></td>${c.map(sCell).join('')}</tr>`).join('')}`;
     const screen = `<div class="no-print">
-      <div class="grid g-4 kpis mb">${kpis.map(([l, n]) => `<div class="card kpi"><div><div class="label">${l}</div><div class="value">${n}</div></div></div>`).join('')}</div>
-      <div class="card"><div class="card-head"><div><h3>${secTitle}</h3><p>Kỳ báo cáo: ${ky} · ${rows.length} dòng${scope.length ? ' · ' + esc(scope.join('; ')) : ''}</p></div></div>
-        <div class="table-wrap"><table class="table"><thead><tr><th class="stt">STT</th>${headers.map((h, i) => `<th class="${rows.length && numCls(rows[0][i]) ? 'num' : ''}">${h}</th>`).join('')}</tr></thead><tbody>
-          ${rows.map((r, i) => `<tr><td class="stt">${i + 1}</td>${r.map((c, j) => `<td class="${numCls(c)}">${headers[j] === 'Trạng thái' && c ? badge(c) : c}</td>`).join('')}</tr>`).join('')}
+      <div class="grid ${kpis.length === 5 ? 'g-5' : 'g-4'} kpis mb">${kpis.map(([l, n]) => `<div class="card kpi"><div><div class="label">${l}</div><div class="value">${n}</div></div></div>`).join('')}</div>
+      <div class="card"><div class="card-head"><div><h3>${secTitle}</h3><p>Kỳ báo cáo: ${ky} · ${count || rows.length + ' dòng'}${scope.length ? ' · ' + esc(scope.join('; ')) : ''}</p></div>${rows.some((r) => r.cells) ? '<button class="btn sm" id="grpAll">Mở / thu gọn tất cả</button>' : ''}</div>
+        <div class="table-wrap"><table class="table rp-screen"><thead><tr><th class="stt">STT</th>${headers.map((h, i) => `<th class="${rows.length && numCls(first[i]) ? 'num' : ''}">${h}</th>`).join('')}</tr></thead><tbody>
+          ${rows.map(sRow).join('')}
           ${total ? `<tr class="total"><td></td><td>Tổng cộng</td>${total.map((c) => `<td class="${numCls(c)}">${c}</td>`).join('')}</tr>` : ''}</tbody></table></div></div></div>`;
     // Bản in: khung bảng có thead/tfoot trống để lặp lề trên/dưới ở mọi trang (in với @page margin 0 → trình duyệt không chèn ngày giờ, URL, số trang)
     return screen + `<table class="rp-frame print-only"><thead><tr><td><div class="rp-gap"></div></td></tr></thead><tfoot><tr><td><div class="rp-gap"></div></td></tr></tfoot><tbody><tr><td><div class="rp-doc">
@@ -297,10 +312,11 @@ Pages.reports = {
       <dl class="rp-meta"><dt>Đơn vị</dt><dd>Navigos Group Việt Nam</dd><dt>Người lập báo cáo</dt><dd>${esc(u.ho_ten)} (${esc(u.vai_tro)})</dd>
         <dt>Phạm vi dữ liệu</dt><dd>${scope.length ? esc(scope.join('; ')) : 'Toàn bộ dự án của công ty'}</dd><dt>Đối tượng</dt><dd>${esc(doiTuong)}</dd></dl>
       <div class="rp-sec">I. Tổng quan trong kỳ</div>
-      <div class="rp-kpis">${kpis.map(([l, n]) => `<div><div class="l">${l}</div><div class="v">${n}</div></div>`).join('')}</div>
+      <div class="rp-kpis${kpis.length === 5 ? ' n5' : ''}">${kpis.map(([l, n]) => `<div><div class="l">${l}</div><div class="v">${n}</div></div>`).join('')}</div>
       <div class="rp-sec">II. ${secTitle}</div>
-      <div class="table-wrap"><table class="rp-table"><thead><tr><th style="width:48px">STT</th>${headers.map((h, i) => `<th class="${np(i)}">${h}</th>`).join('')}</tr></thead><tbody>
-        ${rows.map((r, i) => `<tr><td class="c">${i + 1}</td>${r.map(cell).join('')}</tr>`).join('')}
+      <div class="table-wrap"><table class="rp-table${headers.length > 9 ? ' wide' : ''}"><thead><tr><th style="width:48px">STT</th>${headers.map((h, i) => `<th class="${np(i)}">${h}</th>`).join('')}</tr></thead><tbody>
+        ${rows.map((r, i) => !r.cells ? `<tr><td class="c">${i + 1}</td>${r.map(cell).join('')}</tr>`
+          : `<tr class="grp"><td class="c">${i + 1}</td>${r.cells.map(cell).join('')}</tr><tr class="kid-head"><td></td><td colspan="${headers.length}">${r.childTitle}</td></tr>${r.children.map((c) => `<tr class="kid"><td></td>${c.map(cell).join('')}</tr>`).join('')}`).join('')}
         ${total ? `<tr class="total"><td colspan="2" class="c">Tổng cộng</td>${total.map((c, i) => cell(c, i + 1)).join('')}</tr>` : ''}</tbody></table></div>
       ${notes.length ? `<div class="rp-notes"><b>Ghi chú</b><ul>${notes.map((n) => `<li>${n}</li>`).join('')}</ul></div>` : ''}
       <div class="rp-end"><div class="rp-date">${place}, ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}</div>
@@ -308,6 +324,13 @@ Pages.reports = {
         <div><b>NGƯỜI PHÊ DUYỆT</b><i>(Ký, ghi rõ họ tên, đóng dấu)</i></div></div></div></div></td></tr></tbody></table>`;
   },
   body() {
+    this.render2();
+    const b = $('#rbody');
+    const open = (i, on) => { const tr = $(`[data-grp="${i}"]`, b); tr.classList.toggle('open', on); $$(`.kid-${i}`, b).forEach((x) => (x.hidden = !on)); };
+    $$('[data-grp]', b).forEach((tr) => (tr.onclick = () => open(tr.dataset.grp, !tr.classList.contains('open'))));
+    $('#grpAll', b) && ($('#grpAll', b).onclick = () => { const all = $$('[data-grp]', b); const on = !all.every((t) => t.classList.contains('open')); all.forEach((t) => open(t.dataset.grp, on)); });
+  },
+  render2() {
     const f = this.f; const b = $('#rbody');
     const pct = (a, c) => (c ? Math.round((a / c) * 100) : 0);
     const pc1 = (a, c) => (c ? ((a / c) * 100).toFixed(1).replace('.', ',') + '%' : '–');
@@ -316,15 +339,21 @@ Pages.reports = {
     const short = (s) => s.replace(/^(Công ty (CP|TNHH)|Ngân hàng TMCP) /, '');
     if (this.type === 'tien-do' || this.type === 'tre-han') {
       const late = this.type === 'tre-han'; const rows = late ? Reports.overdue(f) : Reports.progress(f); if (!rows.length) return none();
-      const can = sum(rows.map((r) => r.ct.so_luong)); const nhan = sum(rows.map((r) => r.hired));
-      b.innerHTML = this.doc({ doiTuong: `${rows.length} vị trí tuyển dụng`, secTitle: late ? 'Danh sách vị trí trễ hạn' : 'Số liệu chi tiết theo vị trí',
-        kpis: [['Số vị trí', rows.length], ['Cần tuyển', can], ['Đã nhận việc', nhan], late ? ['Số ngày trễ trung bình', Math.round(sum(rows.map((r) => -daysUntil(r.ct.han_hoan_thanh))) / rows.length)] : ['Tỷ lệ hoàn thành chỉ tiêu', pc1(nhan, can)]],
-        headers: ['Vị trí (ID)', 'Khách hàng', 'Phụ trách', 'Hạn hoàn thành', 'Cần tuyển', 'Nhận việc', 'Tiến độ', 'Đề cử', 'Phỏng vấn', 'Trạng thái'],
-        rows: rows.map((r) => [`${esc(r.ct.vi_tri)}<div class="t-sub">${Code.ct(r.ct.id)}</div>`, esc(short(r.kh.ten_cong_ty)), esc(r.staff || '—'), `${fmtDate(r.ct.han_hoan_thanh)}${r.dl ? `<div class="t-sub" style="color:var(--${r.dl.level === 'red' ? 'red' : 'amber'})">${r.dl.text}</div>` : ''}`, r.ct.so_luong, r.hired, r.pct + '%', r.decu, r.pv, esc(r.ct.trang_thai)]),
-        total: ['', '', '', can, nhan, pc1(nhan, can), sum(rows.map((r) => r.decu)), sum(rows.map((r) => r.pv)), ''],
-        notes: late ? ['Vị trí trễ hạn: đã quá hạn hoàn thành mà chưa Hoàn thành / Đã đóng / Đã hủy.'] : ['Tiến độ = số ứng viên nhận việc / số lượng cần tuyển của vị trí.'] })
-        + (late ? '' : chart('Tiến độ các vị trí đang thực hiện', rows.filter((r) => r.ct.trang_thai === ST.CT.DANG).map((r) => `<div style="margin-bottom:10px"><div class="prog-meta"><span class="strong" style="font-size:12px">${esc(r.ct.vi_tri)}</span><span>${r.hired}/${r.ct.so_luong}</span></div>${progressBar(r.pct, r.dl?.level === 'red' ? 'red' : r.dl ? 'amber' : '')}</div>`).join('') || emptyState('Không có')));
-      this._export = { headers: ['STT', 'ID vị trí', 'Vị trí', 'Khách hàng', 'Phụ trách', 'Hạn hoàn thành', 'Cảnh báo', 'Cần tuyển', 'Đã nhận việc', 'Tiến độ %', 'Số đề cử', 'Số phỏng vấn', 'Trạng thái'], rows: rows.map((r, i) => [i + 1, Code.ct(r.ct.id), r.ct.vi_tri, r.kh.ten_cong_ty, r.staff, fmtDate(r.ct.han_hoan_thanh), r.dl?.text || '', r.ct.so_luong, r.hired, r.pct, r.decu, r.pv, r.ct.trang_thai]) };
+      const das = Reports.byProject(rows); const can = sum(das.map((g) => g.can)); const nhan = sum(das.map((g) => g.nhan));
+      const hanCell = (d, dl) => `${fmtDate(d)}${dl ? `<div class="t-sub" style="color:var(--${dl.level === 'red' ? 'red' : 'amber'})">${dl.text}</div>` : ''}`;
+      const ctCells = (r) => [`${esc(r.ct.vi_tri)}<div class="t-sub">${Code.ct(r.ct.id)}</div>`, '', esc(r.staff || '—'), hanCell(r.ct.han_hoan_thanh, r.dl), '—', r.ct.so_luong, r.hired, r.pct + '%', ...(late ? [r.lateDays] : [r.decu, r.pv]), esc(r.status)];
+      b.innerHTML = this.doc({ doiTuong: `${das.length} dự án tuyển dụng · ${rows.length} vị trí`, count: `${das.length} dự án · ${rows.length} vị trí`, secTitle: late ? 'Dự án có vị trí trễ hạn' : 'Số liệu theo dự án',
+        kpis: late ? [['Số dự án', das.length], ['Vị trí trễ hạn', rows.length], ['Cần tuyển', can], ['Đã nhận việc', nhan], ['Số ngày trễ trung bình', Math.round(sum(rows.map((r) => r.lateDays)) / rows.length)]]
+          : [['Số dự án', das.length], ['Số vị trí', rows.length], ['Cần tuyển', can], ['Đã nhận việc', nhan], ['Tỷ lệ hoàn thành chỉ tiêu', pc1(nhan, can)]],
+        headers: ['Dự án (ID)', 'Khách hàng', 'Phụ trách', 'Hạn hoàn thành', late ? 'Vị trí trễ' : 'Vị trí', 'Cần tuyển', 'Nhận việc', 'Tiến độ', ...(late ? ['Số ngày trễ'] : ['Đề cử', 'Phỏng vấn']), 'Trạng thái'],
+        rows: das.map((g) => ({ childTitle: `Chi tiết theo vị trí của dự án ${Code.da(g.da.id)}`, children: g.list.map(ctCells),
+          cells: [`<b>${esc(g.da.ten_du_an)}</b><div class="t-sub">${Code.da(g.da.id)}</div>`, esc(short(g.kh.ten_cong_ty)), esc(g.staff || '—'), fmtDate(g.han), g.list.length, g.can, g.nhan, g.pct + '%', ...(late ? [g.lateDays] : [g.decu, g.pv]), esc(g.status)] })),
+        total: ['', '', '', rows.length, can, nhan, pc1(nhan, can), ...(late ? [''] : [sum(das.map((g) => g.decu)), sum(das.map((g) => g.pv))]), ''],
+        notes: late ? ['Vị trí trễ hạn: đã qua hạn hoàn thành tính đến cuối kỳ mà chưa tuyển đủ chỉ tiêu, không gồm vị trí Đã đóng / Đã hủy.'] : ['Tiến độ = số ứng viên nhận việc / số lượng cần tuyển, tính lũy kế đến cuối kỳ.'] })
+        + (late ? '' : chart('Tiến độ các dự án', das.map((g) => `<div style="margin-bottom:10px"><div class="prog-meta"><span class="strong" style="font-size:12px">${esc(g.da.ten_du_an)} <span class="muted">· ${g.list.length} vị trí</span></span><span>${g.nhan}/${g.can}</span></div>${progressBar(g.pct, g.list.some((r) => r.dl?.level === 'red') ? 'red' : g.list.some((r) => r.dl) ? 'amber' : '')}</div>`).join('')));
+      const H = ['STT', 'Cấp', 'ID', 'Dự án / Vị trí', 'Khách hàng', 'Phụ trách', 'Hạn hoàn thành', 'Số vị trí', 'Cần tuyển', 'Đã nhận việc', 'Tiến độ %', ...(late ? ['Số ngày trễ'] : ['Số đề cử', 'Số phỏng vấn']), 'Trạng thái'];
+      this._export = { headers: H, rows: das.flatMap((g, i) => [[i + 1, 'Dự án', Code.da(g.da.id), g.da.ten_du_an, g.kh.ten_cong_ty, g.staff, fmtDate(g.han), g.list.length, g.can, g.nhan, g.pct, ...(late ? [g.lateDays] : [g.decu, g.pv]), g.status],
+        ...g.list.map((r) => ['', 'Vị trí', Code.ct(r.ct.id), r.ct.vi_tri, r.kh.ten_cong_ty, r.staff, fmtDate(r.ct.han_hoan_thanh), '', r.ct.so_luong, r.hired, r.pct, ...(late ? [r.lateDays] : [r.decu, r.pv]), r.status])]) };
     } else if (this.type === 'khach-hang') {
       const rows = Reports.byCustomer(f); if (!rows.length) return none();
       const S = (k) => sum(rows.map((r) => r[k]));

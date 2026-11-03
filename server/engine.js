@@ -19,7 +19,7 @@ function createEngine(root) {
   vm.createContext(ctx);
   const src = ['core.js', 'services.js', 'seed.js'].map((f) => fs.readFileSync(path.join(root, 'public', 'js', f), 'utf8')).join('\n;\n');
   // Đưa các khai báo cấp cao (const/let) ra ngoài sandbox
-  vm.runInContext(src + '\n;globalThis.__api = { App, Store, Auth, Svc, Q, Seed, ROLES, ST, TABLES, recalcAll };', ctx, { filename: 'business-layer.js' });
+  vm.runInContext(src + '\n;globalThis.__api = { App, Store, Auth, Svc, Q, Seed, ROLES, ST, TABLES, recalcAll, Reports };', ctx, { filename: 'business-layer.js' });
   const api = ctx.__api;
   api.Store.save = () => {}; // ghi xuống MySQL do repository.persist() đảm nhiệm
   return api;

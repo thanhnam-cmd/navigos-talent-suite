@@ -6,8 +6,7 @@
      POST /api/login             { username, password }
      POST /api/logout
      POST /api/rpc               { fn, args }  — gọi nghiệp vụ (services.js) trên máy chủ
-     POST /api/switch            { id }        — chuyển nhanh tài khoản (chỉ DEMO_MODE)
-     POST /api/reset                           — khôi phục dữ liệu mẫu (DEMO_MODE / Quản trị viên)
+     POST /api/reset                           — khôi phục dữ liệu mẫu (chỉ Quản trị viên)
    ========================================================== */
 const http = require('http');
 const fs = require('fs');
@@ -21,7 +20,9 @@ const cfg = loadEnv();
 const PUBLIC = path.join(cfg.ROOT, 'public');
 const E = createEngine(cfg.ROOT);
 const repo = new Repository(cfg);
+const ACCOUNTS = require('./accounts'); // mã băm mật khẩu ban đầu của từng tài khoản
 const sessions = new Map(); // sid → { uid, at }
+const failed = new Map(); // tên đăng nhập → { n: số lần sai liên tiếp, at }
 const SESSION_TTL = 8 * 3600 * 1000;
 
 /* ---------- Thực thi tuần tự (mỗi thao tác là một giao dịch nhất quán) ---------- */
@@ -69,6 +70,7 @@ async function persistOrRollback() {
 async function seedFresh() {
   console.log('• CSDL trống — sinh dữ liệu mẫu bằng chính quy trình nghiệp vụ…');
   E.Auth.user = null; E.Store.db = E.Seed.build(); E.App.clock = null; E.Auth.user = null;
+  E.Store.db.nhan_su.forEach((n) => { if (ACCOUNTS[n.ten_dang_nhap]) n.mat_khau = ACCOUNTS[n.ten_dang_nhap]; });
   await repo.persist(E.Store.db);
   const total = E.TABLES.reduce((n, t) => n + E.Store.db[t].length, 0);
   console.log(`• Đã ghi ${total} bản ghi vào MySQL`);
@@ -81,9 +83,13 @@ async function api(req, res, url) {
 
   if (p === '/api/login' && req.method === 'POST') {
     const b = await readBody(req);
+    // Chống dò mật khẩu: sai 5 lần liên tiếp với cùng tên đăng nhập → khóa đăng nhập 5 phút
+    const key = String(b.username || '').trim().toLowerCase(); const f = failed.get(key);
+    if (f && f.n >= 5 && Date.now() - f.at < 5 * 60000) return send(res, 429, { ok: false, error: 'Đăng nhập sai quá 5 lần. Vui lòng thử lại sau 5 phút hoặc liên hệ Quản trị viên.' });
     return serial(async () => {
       const r = E.Auth.login(String(b.username || ''), String(b.password || '')); const u = E.Auth.user; E.Auth.user = null;
-      if (!r.ok) return send(res, 401, r);
+      if (!r.ok) { const x = failed.get(key); failed.set(key, { n: x && Date.now() - x.at < 5 * 60000 ? x.n + 1 : 1, at: Date.now() }); return send(res, 401, r); }
+      failed.delete(key);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...newSession(req, u.id) });
       res.end(payload(null, u));
     });
@@ -95,15 +101,8 @@ async function api(req, res, url) {
 
   if (p === '/api/logout' && req.method === 'POST') { sessions.delete(s.sid); return send(res, 200, { ok: true }, { 'Set-Cookie': 'nts_sid=; Path=/; Max-Age=0' }); }
 
-  if (p === '/api/switch' && req.method === 'POST') {
-    if (!cfg.DEMO_MODE) return send(res, 403, { ok: false, error: 'Chỉ dùng ở chế độ demo.' });
-    const b = await readBody(req); const u = E.Store.get('nhan_su', b.id);
-    if (!u || u.trang_thai_lam_viec !== 'Đang làm việc') return send(res, 400, { ok: false, error: 'Tài khoản không hợp lệ.' });
-    sessions.get(s.sid).uid = u.id; return send(res, 200, payload(null, u));
-  }
-
   if (p === '/api/reset' && req.method === 'POST') {
-    if (!cfg.DEMO_MODE && s.user.vai_tro !== 'Quản trị viên') return send(res, 403, { ok: false, error: 'Không có quyền.' });
+    if (s.user.vai_tro !== 'Quản trị viên') return send(res, 403, { ok: false, error: 'Chỉ Quản trị viên được khôi phục dữ liệu mẫu.' });
     const uname = s.user.ten_dang_nhap;
     return serial(async () => {
       await repo.truncateAll(); await seedFresh();

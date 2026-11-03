@@ -19,7 +19,7 @@ npm start
 `npm run setup` (chỉ cần lần đầu) sẽ: tạo `.env` với mật khẩu CSDL ngẫu nhiên → khởi tạo một **instance MySQL 8 riêng của dự án** (dữ liệu trong `database/mysql-data`, cổng **3307**, dùng bản MySQL Server 8.0 đã cài trên máy, không đụng tới dịch vụ MySQL80 cổng 3306) → tạo CSDL `navigos_talent`, tài khoản ứng dụng `navigos_app` (chỉ quyền SELECT/INSERT/UPDATE/DELETE) và nạp `database/schema.sql`.
 Lần khởi động đầu, máy chủ tự sinh dữ liệu mẫu bằng chính quy trình nghiệp vụ và ghi vào MySQL.
 
-**Tài khoản demo** (mật khẩu `123456`): `admin` · `giamdoc` · `quanly` · `nhanvien` · `thuha` · `hoangphuc` · `thanhtam` · `giabao`.
+**Tài khoản**: `admin` · `giamdoc` · `quanly` · `thanhnga` · `nhanvien` · `thuha` · `hoangphuc` · `thanhtam` · `giabao`. Mỗi tài khoản có mật khẩu riêng (mã băm lưu ở `server/accounts.js`); danh sách mật khẩu được giao riêng cho chủ dự án trong tệp `TAI_KHOAN_DANG_NHAP.md` (không đưa lên git). Không còn đăng nhập nhanh bằng tài khoản demo.
 
 ### Dùng máy chủ MySQL có sẵn thay cho instance riêng
 
@@ -69,7 +69,9 @@ LDCoffe/
 ├─ docs/NGHIEP_VU.md         Nghiệp vụ, vòng đời ứng viên, kịch bản demo
 ├─ docs/FIX_DEMO_LAN1.md     Phân tích nhận xét khách hàng (Fix Demo lần 1) và cách xử lý
 ├─ docs/TEST_DEMO_LAN2.md    Phân tích nhận xét khách hàng (Test demo lần 2) và cách xử lý
-└─ docs/FIX_DEMO_3.md        Phân tích nhận xét cuối (Fix demo 3): vai trò Phụ trách/Hỗ trợ, PDF, lỗi trùng lịch
+├─ docs/FIX_DEMO_3.md        Phân tích nhận xét cuối (Fix demo 3): vai trò Phụ trách/Hỗ trợ, PDF, lỗi trùng lịch
+├─ docs/FIX_DEMO_3_LAN2.md   Fix demo 3 (2): lịch ứng viên 60′, khu vực PV, form gửi KH, mẫu in, báo cáo theo dự án, mật khẩu riêng
+└─ docs/CONG_NGHE.md         Ngôn ngữ, thư viện và công cụ đã dùng
 ```
 
 ## Kiến trúc

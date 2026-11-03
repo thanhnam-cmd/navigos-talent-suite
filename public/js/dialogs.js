@@ -3,6 +3,8 @@
    ========================================================== */
 const submitForm = (m, fn) => { const f = m.$('form'); const go = (e) => { e && e.preventDefault(); const r = fn(Form.values(f)); if (r && !r.ok) { if (r.errors) Form.showErrors(f, r.errors); else if (r.error) toast(r.error, 'err'); } }; f.onsubmit = go; m.$('[data-submit]') && (m.$('[data-submit]').onclick = go); };
 const foot = (label = 'Lưu', cls = 'primary') => `<button class="btn" data-close>Hủy</button><button class="btn ${cls}" data-submit>${label}</button>`;
+/** Danh sách giờ 24h, bước 15 phút (07:00–21:00) — chọn bằng một lần bấm, không phải gõ SA/CH */
+const timeOpts = (cur) => { const l = []; for (let mi = 7 * 60; mi <= 21 * 60; mi += 15) l.push(`${String(Math.floor(mi / 60)).padStart(2, '0')}:${String(mi % 60).padStart(2, '0')}`); if (cur && !l.includes(cur)) l.push(cur); return l.sort().map((t) => [t, t]); };
 const doneThen = (m, msg, then) => (r) => { toast(msg); m.close(); Store.save(); then ? then(r) : UI.refresh(); };
 
 const Dlg = {
@@ -60,9 +62,6 @@ const Dlg = {
     const m = modal({ size: 'lg', title: `Phân công nhân sự — ${esc(ct.vi_tri)}`, foot: foot('Lưu phân công'),
       body: `<form novalidate>
         ${reqs.map((y) => `<div class="callout amber mb">${icon('users', 'sm')}<div><b>${esc(Q.ns(y.ma_nguoi_gui).ho_ten)}</b> đề nghị bổ sung người hỗ trợ (${fmtDT(y.ngay_gui)}): ${esc(y.noi_dung)}</div></div>`).join('')}
-        <div class="grid g-2 mb" style="gap:10px">
-          <div class="alert" style="align-items:flex-start"><span class="badge blue sm">Phụ trách</span><div class="small">Thực hiện toàn bộ nghiệp vụ của vị trí: đề cử, gửi khách hàng, lên lịch, ghi nhận kết quả, offer.</div></div>
-          <div class="alert" style="align-items:flex-start"><span class="badge violet sm">Hỗ trợ</span><div class="small">Chỉ được chọn làm người phỏng vấn, xem lịch của mình, xem vị trí và hồ sơ ứng viên mình phỏng vấn, ghi nhận kết quả buổi mình tham gia.</div></div></div>
         <p class="muted small" style="margin-top:0">Khu vực vị trí: <b>${esc(Store.name('khu_vuc', ct.ma_khu_vuc))}</b>. Bỏ chọn một nhân viên đang tham gia để chuyển phân công — lịch sử phân công vẫn được giữ.</p>
         <div class="stack">${list.map(({ n, sameArea, load }) => `<div class="alert"><div class="person" style="flex:1">${avatar(n.ho_ten, 'sm')}<div><div class="nm small">${esc(n.ho_ten)} ${sameArea ? '<span class="badge sm green">Cùng khu vực</span>' : ''}</div><div class="sb">${esc(n.chuc_vu)} · ${esc(Store.name('khu_vuc', n.ma_khu_vuc))} · ${load} vị trí đang tham gia</div></div></div>${roleSel(n)}</div>`).join('')}</div></form>` });
     submitForm(m, (v) => {
@@ -129,35 +128,46 @@ const Dlg = {
     const def = l ? new Date(l.thoi_gian_bat_dau) : (() => { const d = new Date(now()); d.setDate(d.getDate() + 1); if ([0, 6].includes(d.getDay())) d.setDate(d.getDate() + (d.getDay() === 6 ? 2 : 1)); d.setHours(9, 0, 0, 0); return d; })();
     const defEnd = l ? new Date(l.thoi_gian_ket_thuc) : new Date(def.getTime() + 3600000);
     const extra = !l && Q.extraRoundReason(hs);
+    const kvDef = l?.ma_khu_vuc ?? Q.defaultIvRegion(ct);
+    const kvOptsIv = DB.khu_vuc.map((k) => [k.id, k.ten]);
     const m = modal({ size: 'lg', title: `${l ? 'Cập nhật lịch phỏng vấn' : 'Lên lịch phỏng vấn'} — ${esc(uv.ho_ten)}${chips}`, foot: foot(l ? 'Lưu thay đổi' : 'Lưu lịch'),
       body: `${extra ? `<div class="callout amber mb">${icon('alert', 'sm')}<div>${esc(extra)} — buổi này sẽ là <b>vòng ${Q.lichOfHs(hs.id).filter((x) => x.trang_thai !== ST.LICH.HUY).length + 1}</b>. Ghi rõ yêu cầu của khách hàng.</div></div>` : ''}
         <form class="form-grid" novalidate>
         ${extra ? Form.field('Yêu cầu phỏng vấn bổ sung của khách hàng', 'ghi_chu', { type: 'textarea', req: true, full: true, ph: 'VD: Khách hàng muốn Giám đốc khối gặp thêm ứng viên trước khi gửi offer' }) : l?.ghi_chu ? `<div class="field full"><label>Yêu cầu phỏng vấn bổ sung</label><div>${esc(l.ghi_chu)}</div></div>` : ''}
         ${Form.field('Ngày phỏng vấn (khách hàng chốt)', 'ngay', { type: 'date', req: true, value: toDateStr(def) })}
         ${Form.field('Nhân viên phỏng vấn', 'ma_nhan_su', { req: true, value: defNs, opts: staffOpts, hint: `Nhân sự phụ trách / hỗ trợ của vị trí (${team.length} người). <a href="#" data-sup>Cần thêm người? Báo Quản lý</a>` })}
-        ${Form.field('Giờ bắt đầu', 'gio_bd', { type: 'time', req: true, value: fmtTime(def) })}
-        ${Form.field('Giờ kết thúc', 'gio_kt', { type: 'time', req: true, value: fmtTime(defEnd) })}
+        ${Form.field('Giờ bắt đầu', 'gio_bd', { req: true, value: fmtTime(def), opts: timeOpts(fmtTime(def)) })}
+        ${Form.field('Giờ kết thúc', 'gio_kt', { req: true, value: fmtTime(defEnd), opts: timeOpts(fmtTime(defEnd)) })}
         ${Form.field('Hình thức', 'hinh_thuc', { req: true, value: l?.hinh_thuc || 'Trực tuyến', opts: ['Trực tuyến', 'Trực tiếp'] })}
-        ${Form.field('Đường dẫn / Địa điểm', 'dia_diem_link', { req: true, value: l?.dia_diem_link || '', ph: 'https://meet.google.com/… hoặc địa chỉ văn phòng khách hàng' })}
+        ${Form.field('Khu vực địa điểm phỏng vấn', 'ma_khu_vuc', { req: true, value: kvDef, opts: kvOptsIv, hint: 'Phỏng vấn trực tiếp: nhân viên phỏng vấn phải cùng khu vực.' })}
+        ${Form.field('Đường dẫn / Địa điểm', 'dia_diem_link', { req: true, full: true, value: l?.dia_diem_link || '', ph: 'https://meet.google.com/… hoặc địa chỉ văn phòng khách hàng' })}
         ${Form.field('Người tham gia — phía công ty', 'nguoi_tham_gia_cong_ty', { value: l ? l.nguoi_tham_gia_cong_ty || '' : `${Q.ns(defNs).ho_ten} (Navigos)` })}
         ${Form.field('Người tham gia — phía khách hàng', 'nguoi_tham_gia_khach_hang', { value: l ? l.nguoi_tham_gia_khach_hang || '' : Q.khOfCt(ct).nguoi_lien_he })}
         <div class="full" id="ivCheck"></div></form>` });
     m.$$('[data-sup]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); Dlg.requestSupport(ct.id, () => {}); }));
     const f = m.$('form');
     const times = () => { const v = Form.values(f); const bd = v.ngay && v.gio_bd ? new Date(`${v.ngay}T${v.gio_bd}`) : null; const kt = v.ngay && v.gio_kt ? new Date(`${v.ngay}T${v.gio_kt}`) : null; return { v, bd, kt }; };
-    // Bước 2: kiểm tra trùng lịch & cảnh báo ngay khi nhập (cùng quy tắc với máy chủ)
+    const kvSel = f.ma_khu_vuc; const kvBox = kvSel.closest('.field');
+    const syncKv = () => { const off = f.hinh_thuc.value === 'Trực tiếp'; kvSel.disabled = !off; kvBox.style.opacity = off ? '' : '.55'; };
+    // Bước 2: kiểm tra lịch ứng viên, khu vực, trùng lịch nhân viên & cảnh báo ngay khi nhập (cùng quy tắc với máy chủ)
     const check = () => {
       const { v, bd, kt } = times(); const box = m.$('#ivCheck');
-      if (!bd || !kt || isNaN(bd) || isNaN(kt) || kt <= bd || !v.ma_nhan_su) { box.innerHTML = ''; return; }
-      const chk = Q.scheduleCheck({ nsId: v.ma_nhan_su, bd, kt, hinh_thuc: v.hinh_thuc, ctId: ct.id, exceptId: lichId });
+      if (!bd || !kt || isNaN(bd) || isNaN(kt) || !v.ma_nhan_su) { box.innerHTML = ''; return; }
+      if (kt <= bd) { box.innerHTML = `<div class="callout red">${icon('alert', 'sm')}<div>Giờ kết thúc phải sau giờ bắt đầu.</div></div>`; return; }
+      const kv = v.hinh_thuc === 'Trực tiếp' ? Number(v.ma_khu_vuc) || null : null;
+      const freeHtml = (title) => { const free = Q.freeInterviewers({ bd, kt, hinh_thuc: v.hinh_thuc, ctId: ct.id, kv, exceptId: lichId }).slice(0, 6);
+        return free.length ? `<div class="mt-sm">${title}</div><div class="chip-group mt-sm">${free.map((x) => `<button type="button" class="chip" data-ns="${x.id}">${esc(x.ho_ten)} · ${esc(x.khu_vuc)} · ${x.vai_tro}${x.canh_bao ? ` · ${x.canh_bao} cảnh báo` : ''}</button>`).join('')}</div>`
+          : `<div class="mt-sm">Không còn nhân sự nào của vị trí phù hợp trong khung giờ này.</div><button type="button" class="btn sm mt-sm" data-sup>${icon('users', 'sm')} Báo Quản lý phân công thêm người hỗ trợ</button>`; };
+      const bind = () => { m.$$('[data-ns]').forEach((b) => (b.onclick = () => { f.ma_nhan_su.value = b.dataset.ns; f.ma_nhan_su.dispatchEvent(new Event('change')); })); m.$$('#ivCheck [data-sup]').forEach((b) => (b.onclick = () => Dlg.requestSupport(ct.id, () => {}))); };
+      const cc = Q.candidateCheck({ uvId: uv.id, bd, kt, exceptId: lichId });
+      if (cc.length) { box.innerHTML = `<div class="callout red">${icon('alert', 'sm')}<div><b>Trùng lịch ứng viên — không thể lưu.</b> ${esc(uv.ho_ten)} đã có buổi phỏng vấn ${cc.map((c) => esc(Q.candidateClash(c))).join('; ')}. Buổi trước phải kết thúc trước giờ bắt đầu buổi sau ít nhất ${Q.CANDIDATE_GAP} phút.</div></div>`; return; }
+      const mis = Q.regionMismatch(Q.ns(v.ma_nhan_su), v.hinh_thuc, kv);
+      if (mis) { box.innerHTML = `<div class="callout red">${icon('alert', 'sm')}<div><b>Khác khu vực — không thể lưu.</b> ${esc(mis)}${freeHtml(`Nhân sự của vị trí tại ${esc(Store.name('khu_vuc', kv))} đang rảnh:`)}</div></div>`; bind(); return; }
+      const chk = Q.scheduleCheck({ nsId: v.ma_nhan_su, bd, kt, hinh_thuc: v.hinh_thuc, ctId: ct.id, kv, exceptId: lichId });
       if (chk.conflicts.length) {
-        const free = Q.freeInterviewers({ bd, kt, hinh_thuc: v.hinh_thuc, ctId: ct.id, exceptId: lichId }).slice(0, 6);
         box.innerHTML = `<div class="callout red">${icon('alert', 'sm')}<div><b>Trùng lịch — không thể lưu.</b> ${esc(Q.ns(v.ma_nhan_su).ho_ten)} đã có: ${chk.conflicts.map((c) => `${fmtTime(c.thoi_gian_bat_dau)}–${fmtTime(c.thoi_gian_ket_thuc)} (${esc(Q.uv(Q.hs(c.ma_ho_so_ung_vien).ma_ung_vien).ho_ten)})`).join(', ')}.
-          ${free.length ? `<div class="mt-sm">Chọn nhân sự khác của vị trí đang rảnh trong khung giờ này:</div>
-          <div class="chip-group mt-sm">${free.map((x) => `<button type="button" class="chip" data-ns="${x.id}">${esc(x.ho_ten)} · ${x.vai_tro}${x.canh_bao ? ` · ${x.canh_bao} cảnh báo` : ''}</button>`).join('')}</div>`
-          : `<div class="mt-sm">Không còn nhân sự nào của vị trí rảnh trong khung giờ này.</div><button type="button" class="btn sm mt-sm" data-sup>${icon('users', 'sm')} Báo Quản lý phân công thêm người hỗ trợ</button>`}</div></div>`;
-        m.$$('[data-ns]').forEach((b) => (b.onclick = () => { f.ma_nhan_su.value = b.dataset.ns; f.ma_nhan_su.dispatchEvent(new Event('change')); }));
-        m.$$('#ivCheck [data-sup]').forEach((b) => (b.onclick = () => Dlg.requestSupport(ct.id, () => {})));
+          ${freeHtml('Chọn nhân sự khác của vị trí đang rảnh trong khung giờ này:')}</div></div>`;
+        bind();
       } else if (chk.warnings.length) {
         box.innerHTML = `<div class="callout amber">${icon('alert', 'sm')}<div><b>Cảnh báo xếp lịch (${chk.warnings.length})</b> — vẫn lưu được sau khi xác nhận:<ul style="margin:6px 0 0;padding-left:18px">${chk.warnings.map((w) => `<li><b>${esc(w.loai)}:</b> ${esc(w.text)}</li>`).join('')}</ul></div></div>`;
       } else box.innerHTML = `<div class="callout green">${icon('checkCircle', 'sm')}<div>Không trùng lịch, không có cảnh báo — sẵn sàng lưu.</div></div>`;
@@ -166,9 +176,16 @@ const Dlg = {
     f.ma_nhan_su.addEventListener('change', () => { // đổi nhân viên phỏng vấn → cập nhật danh sách người tham gia
       const a = Q.ns(prevNs)?.ho_ten, b = Q.ns(f.ma_nhan_su.value)?.ho_ten; if (a && b && f.nguoi_tham_gia_cong_ty.value.includes(a)) f.nguoi_tham_gia_cong_ty.value = f.nguoi_tham_gia_cong_ty.value.replace(a, b); prevNs = Number(f.ma_nhan_su.value);
     });
-    ['ngay', 'gio_bd', 'gio_kt', 'hinh_thuc', 'ma_nhan_su'].forEach((k) => f[k].addEventListener('change', check));
-    ['gio_bd', 'gio_kt'].forEach((k) => f[k].addEventListener('input', check));
-    check();
+    // Đổi giờ bắt đầu → giữ nguyên thời lượng buổi phỏng vấn
+    let dur = Math.max(15, Math.round((defEnd - def) / 60000));
+    const toMin = (t) => { const [h, mi] = String(t || '').split(':').map(Number); return h * 60 + mi; };
+    const setEnd = (min) => { const t = `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`; if (![...f.gio_kt.options].some((o) => o.value === t)) f.gio_kt.add(new Option(t, t)); f.gio_kt.value = t; };
+    f.gio_bd.addEventListener('change', () => setEnd(Math.min(toMin(f.gio_bd.value) + dur, 23 * 60 + 45)));
+    f.gio_kt.addEventListener('change', () => { const d = toMin(f.gio_kt.value) - toMin(f.gio_bd.value); if (d > 0) dur = d; });
+    f.hinh_thuc.addEventListener('change', syncKv);
+    f.dia_diem_link.addEventListener('input', () => { const k = f.hinh_thuc.value === 'Trực tiếp' && Q.regionInText(f.dia_diem_link.value); if (k && Number(kvSel.value) !== k) { kvSel.value = k; check(); } });
+    ['ngay', 'gio_bd', 'gio_kt', 'hinh_thuc', 'ma_nhan_su', 'ma_khu_vuc'].forEach((k) => f[k].addEventListener('change', check));
+    syncKv(); check();
     const done = doneThen(m, l ? 'Đã cập nhật lịch phỏng vấn' : 'Đã lưu lịch — hồ sơ chuyển “Phỏng vấn”', then);
     submitForm(m, () => {
       const { v, bd, kt } = times();
@@ -233,17 +250,70 @@ const Dlg = {
           ${ro('Feedback của khách hàng', fbs.map((f) => `<div>• ${esc(f.noi_dung)} <span class="muted small">(${fmtDate(f.ngay_gui)})</span></div>`).join(''), true)}
         </div>` });
   },
-  /** Gửi đề cử cho khách hàng — hiện thông tin khách hàng để xác nhận (Fix Demo lần 1) */
+  /** Gửi đề cử cho khách hàng: thông tin khách hàng, ứng viên kèm CV, tệp danh sách đề cử (Excel / Google Sheet) và lời nhắn — Fix demo 3 (2) */
   sendToClient(ids, then) {
     const ds = ids.map((id) => Store.get('de_cu', id)).filter((d) => d.trang_thai === ST.DC.DUYET);
     if (!ds.length) return toast('Chỉ gửi được đề cử ở trạng thái Chờ gửi (đã được Quản lý duyệt).', 'warn');
-    const byKh = groupBy(ds, (d) => Q.khOfCt(Q.ct(Q.hs(d.ma_ho_so_ung_vien).ma_chi_tiet_du_an)).id);
-    confirmBox({ title: 'Xác nhận gửi đề cử cho khách hàng', okText: `Xác nhận gửi (${ds.length})`,
-      message: Object.entries(byKh).map(([khId, list]) => { const k = Q.kh(khId); return `<div class="card card-pad mb" style="box-shadow:none">
-        <div class="strong">${esc(k.ten_cong_ty)}</div>
-        <dl class="kv mt-sm" style="grid-template-columns:110px 1fr"><dt>Người liên hệ</dt><dd>${esc(k.nguoi_lien_he)}</dd><dt>Email</dt><dd>${esc(k.email)}</dd><dt>Điện thoại</dt><dd>${esc(k.so_dien_thoai)}</dd><dt>Địa chỉ</dt><dd>${esc(k.dia_chi || '—')}</dd></dl>
-        <div class="small mt-sm"><b>Ứng viên gửi:</b> ${list.map((d) => { const hs = Q.hs(d.ma_ho_so_ung_vien); return `${esc(Q.uv(hs.ma_ung_vien).ho_ten)} (${esc(Q.ct(hs.ma_chi_tiet_du_an).vi_tri)}, ${esc(d.dot_de_cu)})`; }).join('; ')}</div></div>`; }).join('') + '<p class="small muted" style="margin:0">Đề cử chuyển “Đã gửi khách hàng” và chờ phản hồi.</p>',
-      onOk: () => { const r = Svc.sendToClient(ds.map((d) => d.id)); if (!r.ok) { toast(r.error, 'err'); return false; } toast(`Đã gửi ${r.sent} đề cử cho khách hàng`); then ? then() : UI.refresh(); } });
+    const ctOf = (d) => Q.ct(Q.hs(d.ma_ho_so_ung_vien).ma_chi_tiet_du_an); const uvOf = (d) => Q.uv(Q.hs(d.ma_ho_so_ung_vien).ma_ung_vien);
+    const groups = Object.values(groupBy(ds, (d) => ctOf(d).id)).map((list) => ({ ct: ctOf(list[0]), list }));
+    const withCv = ds.filter((d) => uvOf(d).cv_dinh_kem).length;
+    let fmt = 'xlsx';
+    const files = () => groups.map((g) => Q.recListFile(g.ct, g.list[0].dot_de_cu, fmt));
+    const first = groups[0]; const k0 = Q.khOfCt(first.ct);
+    const m = modal({ size: 'lg', title: 'Xác nhận gửi đề cử cho khách hàng', foot: `<button class="btn" data-close>Hủy</button><button class="btn primary" data-submit>${icon('send', 'sm')} Xác nhận gửi (${ds.length})</button>`,
+      body: `<form novalidate class="send-form">
+        ${groups.map(({ ct, list }) => { const k = Q.khOfCt(ct); return `<div class="send-co">
+          <div class="row between" style="gap:8px;flex-wrap:wrap"><b>${esc(k.ten_cong_ty)}</b><span class="badge blue sm">${esc(ct.vi_tri)} · ${Code.ct(ct.id)}</span></div>
+          <dl class="send-kv"><dt>Người liên hệ</dt><dd>${esc(k.nguoi_lien_he)}</dd><dt>Email</dt><dd>${esc(k.email)}</dd><dt>Địa chỉ</dt><dd>${esc(k.dia_chi || '—')}</dd><dt>Điện thoại</dt><dd>${esc(k.so_dien_thoai)}</dd></dl></div>
+          <div class="send-sec"><span>Ứng viên gửi (${list.length})</span><span class="muted">Mỗi ứng viên kèm CV đã lưu trong hồ sơ</span></div>
+          <div class="send-list">${list.map((d) => { const u = uvOf(d); return `<div class="send-row"><div class="person">${avatar(u.ho_ten, 'sm')}<div><b class="small">${esc(u.ho_ten)}</b> <span class="muted small">${esc(d.dot_de_cu)}</span></div></div>
+            ${u.cv_dinh_kem ? `<span class="file-chip pdf">${icon('file', 'sm')} ${esc(u.cv_dinh_kem)}</span><button type="button" class="btn xs ghost" data-cv="${u.id}">Xem</button>` : '<span class="file-chip none">Chưa có CV trong hồ sơ</span>'}</div>`; }).join('')}</div>`; }).join('')}
+        <div class="send-sec"><span>Tệp đính kèm khi gửi</span><span class="muted">Chọn ít nhất một loại</span></div>
+        <label class="att-opt"><input type="checkbox" name="cv" checked><div><b>CV của từng ứng viên</b><div class="muted small">${withCv} tệp PDF, mỗi tệp là CV của một ứng viên trong danh sách trên.</div></div></label>
+        <label class="att-opt"><input type="checkbox" name="ds" checked><div style="flex:1"><div class="row" style="gap:8px;flex-wrap:wrap"><b>File danh sách đề cử</b><span class="seg" id="fmt"><button type="button" class="on" data-f="xlsx">Excel (.xlsx)</button><button type="button" data-f="sheet">Google Sheet</button></span></div>
+          <div class="muted small">Gồm ${ds.length} ứng viên đề cử: họ tên, năm kinh nghiệm, mức lương mong muốn, notice period, liên hệ.</div><div id="dsFiles" class="mt-sm"></div></div></label>
+        <div class="send-sec"><span>Lời nhắn gửi khách hàng</span><span class="muted">Tùy chọn</span></div>
+        <textarea class="textarea" name="loi_nhan" placeholder="Kính gửi ${esc(String(k0.nguoi_lien_he).replace(/\s*\(.*\)\s*$/, ''))}, Navigos gửi danh sách ứng viên cho vị trí ${esc(first.ct.vi_tri)}…"></textarea></form>` });
+    const f = m.$('form');
+    const drawFiles = () => { m.$('#dsFiles').innerHTML = files().map((n, i) => `<span class="file-chip ${fmt === 'xlsx' ? 'xls' : 'sheet'}">${icon('file', 'sm')} ${esc(n)}</span><button type="button" class="btn xs ghost" data-pv="${i}">Xem trước</button>`).join(' ');
+      m.$$('[data-pv]').forEach((b) => (b.onclick = (e) => { e.preventDefault(); const g = groups[Number(b.dataset.pv)]; Dlg.recListPreview(g.list, files()[Number(b.dataset.pv)]); })); };
+    m.$$('#fmt [data-f]').forEach((b) => (b.onclick = (e) => { e.preventDefault(); fmt = b.dataset.f; m.$$('#fmt [data-f]').forEach((x) => x.classList.toggle('on', x === b)); drawFiles(); }));
+    m.$$('[data-cv]').forEach((b) => (b.onclick = (e) => { e.preventDefault(); Dlg.cvPreview(Number(b.dataset.cv)); }));
+    const sync = () => m.$$('.att-opt').forEach((x) => x.classList.toggle('on', x.querySelector('input').checked));
+    f.cv.onchange = sync; f.ds.onchange = sync; sync(); drawFiles();
+    m.$('[data-submit]').onclick = (e) => {
+      e.preventDefault();
+      const opt = { dinh_kem_cv: f.cv.checked, dinh_kem_ds: f.ds.checked, dinh_dang_ds: fmt, loi_nhan: f.loi_nhan.value };
+      if (!opt.dinh_kem_cv && !opt.dinh_kem_ds) return toast('Chọn ít nhất một loại tệp đính kèm khi gửi khách hàng.', 'err');
+      const names = files(); const r = Svc.sendToClient(ds.map((d) => d.id), opt); if (!r.ok) return toast(r.error, 'err');
+      if (opt.dinh_kem_ds) groups.forEach((g, i) => Dlg.recListFile(g.list, names[i], fmt));
+      m.close(); toast(`Đã gửi ${r.sent} đề cử cho khách hàng${opt.dinh_kem_ds ? ' · đã tạo ' + names.join(', ') : ''}`); then ? then() : UI.refresh();
+    };
+  },
+  /** Dữ liệu của tệp danh sách đề cử gửi khách hàng */
+  recListData(list) {
+    const headers = ['STT', 'Họ tên', 'Năm sinh', 'Email', 'Số điện thoại', 'Số năm kinh nghiệm', 'Mức lương mong muốn (VND)', 'Notice period', 'Đợt đề cử'];
+    const rows = list.map((d, i) => { const u = Q.uv(Q.hs(d.ma_ho_so_ung_vien).ma_ung_vien); return [i + 1, u.ho_ten, u.nam_sinh || '', u.email, u.so_dien_thoai, d.so_nam_kinh_nghiem ?? '', d.muc_luong_mong_muon != null ? Number(d.muc_luong_mong_muon) : '', d.notice_period || '', d.dot_de_cu]; });
+    return { headers, rows };
+  },
+  recListFile(list, name, fmt) {
+    const { headers, rows } = this.recListData(list); const ct = Q.ct(Q.hs(list[0].ma_ho_so_ung_vien).ma_chi_tiet_du_an);
+    if (fmt === 'sheet') Export.csv(name, headers, rows); else Export.excel(name.replace(/\.xlsx$/, ''), `Danh sách đề cử — ${ct.vi_tri} (${Code.ct(ct.id)}) — ${Q.khOfCt(ct).ten_cong_ty}`, headers, rows, { silent: true });
+  },
+  recListPreview(list, name) {
+    const { headers, rows } = this.recListData(list);
+    modal({ size: 'lg', title: `Xem trước — ${esc(name)}`, foot: '<button class="btn primary" data-close>Đóng</button>',
+      body: `<div class="table-wrap"><table class="table"><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td class="${i === 6 ? 'num' : ''}">${i === 6 && c !== '' ? fmtMoney(c) : esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` });
+  },
+  /** Xem CV của ứng viên (bản trình bày từ dữ liệu hồ sơ đã chuẩn hóa) */
+  cvPreview(uvId) {
+    const u = Q.uv(uvId); const age = Q.age(u);
+    modal({ size: 'lg', title: `${icon('file', 'sm')} ${esc(u.cv_dinh_kem || 'CV ứng viên')}`, foot: '<button class="btn primary" data-close>Đóng</button>',
+      body: `<div class="cv-sheet"><div class="cv-head">${avatar(u.ho_ten, 'lg')}<div><h2>${esc(u.ho_ten)}</h2><div class="muted">${esc(Store.name('chuyen_mon', u.ma_chuyen_mon))} · ${esc(Store.name('cap_bac', u.ma_cap_bac))}</div>
+          <div class="small mt-sm">${esc(u.email)} · ${esc(u.so_dien_thoai)}${u.dia_chi ? ' · ' + esc(u.dia_chi) : ''}</div></div></div>
+        <dl class="kv mt"><dt>Năm sinh</dt><dd>${u.nam_sinh ? `${u.nam_sinh} (${age} tuổi)` : '—'}</dd><dt>Giới tính</dt><dd>${esc(u.gioi_tinh || '—')}</dd><dt>Khu vực</dt><dd>${esc(Store.name('khu_vuc', u.ma_khu_vuc))}</dd>
+          <dt>Lĩnh vực</dt><dd>${esc(u.ma_linh_vuc ? Store.name('linh_vuc', u.ma_linh_vuc) : '—')}</dd><dt>Học vấn</dt><dd>${esc(u.trinh_do_hoc_van || '—')}</dd><dt>Kinh nghiệm</dt><dd>${u.so_nam_kinh_nghiem ?? '—'} năm</dd>
+          <dt>Kỹ năng</dt><dd>${String(u.ky_nang || '').split(',').filter(Boolean).map((x) => `<span class="tag">${esc(x.trim())}</span>`).join('') || '—'}</dd><dt>Ghi chú</dt><dd>${esc(u.ghi_chu || '—')}</dd></dl></div>` });
   },
   /** Ban Giám đốc góp ý đề cử → Quản lý nhận (mẫu "Góp ý về đề cử") */
   comment(dcId, then) {
@@ -305,7 +375,7 @@ const Dlg = {
     const items = ready.map((h) => { const u = Q.uv(h.ma_ung_vien); const c = Q.ct(h.ma_chi_tiet_du_an); return { id: h.id, label: u.ho_ten, sub: `${c.vi_tri} — ${Q.khOfCt(c).ten_cong_ty} · ${Code.ct(c.id)} · ${Q.scheduleLabel(h)}`, search: `${u.ho_ten} ${c.vi_tri} ${Code.ct(c.id)}` }; });
     const m = modal({ size: 'sm', title: 'Chọn hồ sơ để lên lịch', foot: foot('Tiếp tục'),
       body: `<form novalidate><div class="field ta"><label>Ứng viên <span class="req">*</span></label><input class="input" name="hs_text" placeholder="Nhập tên ứng viên…" autocomplete="off"><input type="hidden" name="hs"></div>
-        <p class="muted small">Gồm hồ sơ khách hàng đồng ý phỏng vấn và hồ sơ đang phỏng vấn — kể cả ứng viên đã có lịch hoặc đã Đạt khi khách hàng yêu cầu thêm buổi (${ready.length} hồ sơ).</p></form>` });
+        <p class="muted small">Gồm hồ sơ khách hàng đồng ý phỏng vấn và hồ sơ đã phỏng vấn xong cần thêm buổi (${ready.length} hồ sơ). Ứng viên đang có lịch chưa ghi nhận kết quả không hiện ở đây.</p></form>` });
     const f = m.$('form'); Comp.typeahead(f.hs_text, items, (it) => (f.hs.value = it ? it.id : ''));
     submitForm(m, (x) => { if (!x.hs) return { ok: false, errors: { hs_text: 'Gõ tên và chọn ứng viên trong danh sách gợi ý.' } }; m.close(); Dlg.interview(Number(x.hs)); return { ok: true }; });
   },
@@ -335,15 +405,35 @@ const Dlg = {
     const m = modal({ title: 'Gán hồ sơ vào dự án', foot: foot('Gán'), body: `<form novalidate>${Form.field('Dự án (ID)', 'ct', { req: true, opts: ctOpts() })}<p class="muted small">Mã tin của hồ sơ: <span class="code">${esc(Q.hs(hsId).ma_tin_kenh || '(trống)')}</span></p></form>` });
     submitForm(m, (v) => { const r = Svc.assignPending(hsId, v.ct); if (r.ok) doneThen(m, 'Đã gán hồ sơ vào dự án', then)(r); return r; });
   },
-  /** In danh sách đề cử — đánh giá hiệu suất lọc CV của nhân viên (Notes §3) */
+  /** In danh sách đề cử theo mẫu: tiêu đề công ty, vị trí – khách hàng, bảng đề cử, tổng hợp, chữ ký; số trang ở chân trang */
   printRecs(list) {
     const w = window.open('', '_blank'); if (!w) return toast('Trình duyệt chặn cửa sổ in — hãy cho phép pop-up.', 'warn');
-    const rows = list.map((d, i) => { const hs = Q.hs(d.ma_ho_so_ung_vien); const uv = Q.uv(hs.ma_ung_vien); const ct = Q.ct(hs.ma_chi_tiet_du_an);
-      return `<tr><td>${i + 1}</td><td>${esc(uv.ho_ten)}<br><small>${esc(uv.email)} · ${esc(uv.so_dien_thoai)}</small></td><td>${esc(ct.vi_tri)}<br><small>${esc(Q.khOfCt(ct).ten_cong_ty)}</small></td><td>${esc(d.dot_de_cu)}</td><td>${d.so_nam_kinh_nghiem ?? '—'}</td><td>${fmtMoney(d.muc_luong_mong_muon)}</td><td>${esc(d.notice_period || '')}</td><td>${esc(Q.ns(d.ma_nguoi_tao).ho_ten)}</td><td>${esc(d.trang_thai)}${d.phan_hoi_khach_hang ? '<br><small>' + esc(d.phan_hoi_khach_hang) + '</small>' : ''}</td><td>${esc(hs.trang_thai)}</td></tr>`; }).join('');
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Danh sách đề cử ứng viên</title><style>@page{size:A4 landscape;margin:12mm}body{font-family:Inter,Arial,sans-serif;padding:0;margin:0;color:#0f172a}h2{margin:0}table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:left;vertical-align:top}th{background:#283583;color:#fff}small{color:#64748b}.head{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #22b4e6;padding-bottom:10px}</style></head><body>
-      <div class="head"><div><h2>DANH SÁCH ĐỀ CỬ ỨNG VIÊN</h2><div>Navigos Group Việt Nam — Talent Suite</div></div><div style="text-align:right;font-size:12px">Ngày in: ${fmtDT(new Date())}<br>Người in: ${esc(Auth.user.ho_ten)}</div></div>
-      <table><thead><tr><th>#</th><th>Ứng viên</th><th>Vị trí / Khách hàng</th><th>Đợt</th><th>Năm KN</th><th>Lương mong muốn</th><th>Notice</th><th>Người đề cử</th><th>Trạng thái đề cử</th><th>Trạng thái hồ sơ</th></tr></thead><tbody>${rows}</tbody></table>
-      <p style="font-size:12px;margin-top:14px">Tổng: ${list.length} đề cử · Đã duyệt/gửi: ${list.filter((d) => [ST.DC.DUYET, ST.DC.GUI].includes(d.trang_thai)).length} · KH đồng ý phỏng vấn: ${list.filter((d) => d.phan_hoi_khach_hang === 'Đồng ý phỏng vấn').length}</p>
+    const ctOf = (d) => Q.ct(Q.hs(d.ma_ho_so_ung_vien).ma_chi_tiet_du_an); const cts = [...new Set(list.map((d) => ctOf(d).id))].map((id) => Q.ct(id));
+    const one = cts.length === 1; const d0 = new Date(); const u = Auth.user;
+    const dcState = (d) => d.trang_thai === ST.DC.DUYET ? '<b class="ok">Đã duyệt</b>' : d.trang_thai === ST.DC.GUI ? `Đã gửi khách hàng${d.phan_hoi_khach_hang ? `<br><b class="fb">Khách hàng ${esc(d.phan_hoi_khach_hang.charAt(0).toLowerCase() + d.phan_hoi_khach_hang.slice(1))}</b>` : ''}`
+      : d.trang_thai === ST.DC.SUA ? '<b class="warn">Cần chỉnh sửa</b>' : esc(d.trang_thai);
+    const rows = list.map((d, i) => { const hs = Q.hs(d.ma_ho_so_ung_vien); const uv = Q.uv(hs.ma_ung_vien); const ct = ctOf(d);
+      return `<tr><td class="c">${i + 1}</td><td><b>${esc(uv.ho_ten)}</b><small>${esc(uv.email)} · ${esc(uv.so_dien_thoai)}</small></td>${one ? '' : `<td>${esc(ct.vi_tri)}<small>${Code.ct(ct.id)} · ${esc(Q.khOfCt(ct).ten_cong_ty)}</small></td>`}
+        <td class="c">${esc(d.dot_de_cu)}</td><td class="c">${d.so_nam_kinh_nghiem ?? '—'}</td><td class="r">${fmtMoney(d.muc_luong_mong_muon)}</td><td class="c">${esc(d.notice_period || '—')}</td><td class="c">${esc(Q.ns(d.ma_nguoi_tao).ho_ten)}</td><td class="c">${dcState(d)}</td><td class="c">${esc(hs.trang_thai)}</td></tr>`; }).join('');
+    const sub = one ? `<span>VỊ TRÍ</span><b>${esc(cts[0].vi_tri)}</b><i></i><span>KHÁCH HÀNG</span><b>${esc(Q.khOfCt(cts[0]).ten_cong_ty)}</b>` : `<span>PHẠM VI</span><b>${cts.length} vị trí</b><i></i><span>NHÂN VIÊN ĐỀ CỬ</span><b>${esc([...new Set(list.map((d) => Q.ns(d.ma_nguoi_tao).ho_ten))].join(', '))}</b>`;
+    const ok = list.filter((d) => [ST.DC.DUYET, ST.DC.GUI].includes(d.trang_thai)).length; const acc = list.filter((d) => d.phan_hoi_khach_hang === 'Đồng ý phỏng vấn').length;
+    w.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Danh sách đề cử ứng viên</title><style>
+      @page{size:A4 landscape;margin:12mm 14mm 14mm;@bottom-left{content:"Navigos Talent Suite · Danh sách đề cử ứng viên";font:9px Inter,Arial,sans-serif;color:#64748b;border-top:1px solid #e2e8f0}@bottom-right{content:"Trang " counter(page) "/" counter(pages);font:9px Inter,Arial,sans-serif;color:#64748b;border-top:1px solid #e2e8f0}@top-left{content:""}@top-right{content:""}}
+      *{box-sizing:border-box}body{font-family:Inter,Arial,sans-serif;margin:0;color:#0f172a;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .top{display:flex;justify-content:space-between;align-items:flex-start}.co{font-weight:800;color:#283583;letter-spacing:.02em;font-size:13px}.co small{display:block;font-weight:500;color:#64748b;letter-spacing:0;font-size:11px;margin-top:2px}
+      .meta{text-align:right;font-size:11px;color:#475569;line-height:1.5}h1{text-align:center;color:#283583;font-size:20px;margin:10px 0 6px;letter-spacing:.02em}
+      .sub{display:flex;justify-content:center;align-items:center;gap:8px;font-size:12px;padding-bottom:10px;border-bottom:2px solid #22b4e6}.sub span{font-size:10px;color:#64748b;letter-spacing:.06em}.sub b{color:#283583}.sub i{width:1px;height:14px;background:#cbd5e1;margin:0 6px}
+      table{width:100%;border-collapse:collapse;margin-top:14px}th{background:#283583;color:#fff;font-weight:600;padding:7px 6px;font-size:11px;border:1px solid #283583}td{border:1px solid #cbd5e1;padding:7px 6px;vertical-align:middle}
+      tr{break-inside:avoid}td small{display:block;color:#64748b;font-size:10px;margin-top:2px}.c{text-align:center}.r{text-align:right;white-space:nowrap}b.ok{color:#12a150}b.fb{color:#1d6fe0;font-size:10px}b.warn{color:#d97706}
+      .sum{margin-top:10px;font-size:11px}.end{break-inside:avoid}.date{text-align:right;font-style:italic;color:#475569;margin:22px 0 0}
+      .sign{display:flex;justify-content:flex-end;gap:70px;margin-top:10px;text-align:center}.sign div{min-width:170px}.sign b{display:block}.sign i{display:block;font-size:10px;color:#64748b}.sign .nm{margin-top:56px;font-weight:600}
+    </style></head><body>
+      <div class="top"><div class="co">NAVIGOS GROUP VIỆT NAM<small>Talent Suite — Nghiệp vụ tuyển dụng</small></div><div class="meta">Ngày in: ${fmtTime(d0)} · ${fmtDate(d0)}<br>Người in: ${esc(u.ho_ten)}</div></div>
+      <h1>DANH SÁCH ĐỀ CỬ ỨNG VIÊN</h1><div class="sub">${sub}</div>
+      <table><thead><tr><th style="width:38px">STT</th><th>Ứng viên</th>${one ? '' : '<th>Vị trí / Khách hàng</th>'}<th>Đợt</th><th>Năm KN</th><th>Lương mong muốn</th><th>Notice</th><th>Người đề cử</th><th>Trạng thái đề cử</th><th>Trạng thái hồ sơ</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="sum"><b>Tổng:</b> ${list.length} đề cử &nbsp;·&nbsp; <b>Đã duyệt/gửi:</b> ${ok} &nbsp;·&nbsp; <b>KH đồng ý phỏng vấn:</b> ${acc}</div>
+      <div class="end"><div class="date">Ngày ${String(d0.getDate()).padStart(2, '0')} tháng ${String(d0.getMonth() + 1).padStart(2, '0')} năm ${d0.getFullYear()}</div>
+      <div class="sign"><div><b>Người lập danh sách</b><i>(Ký, ghi rõ họ tên)</i><div class="nm">${esc(u.ho_ten)}</div></div><div><b>Quản lý xác nhận</b><i>(Ký, ghi rõ họ tên)</i></div></div></div>
       <script>window.onload=()=>window.print()<\/script></body></html>`);
     w.document.close();
   },

@@ -239,6 +239,7 @@ CREATE TABLE LICH_PHONG_VAN (
   nguoi_tham_gia_khach_hang VARCHAR(500) COMMENT 'Người tham gia phía khách hàng',
   ly_do_huy          VARCHAR(500),
   ghi_chu            VARCHAR(500) COMMENT 'Yêu cầu phỏng vấn bổ sung của khách hàng',
+  ma_khu_vuc         INT NULL COMMENT 'Khu vực địa điểm phỏng vấn trực tiếp — nhân viên phỏng vấn phải cùng khu vực',
   trang_thai         VARCHAR(30) NOT NULL DEFAULT 'Đã lên lịch',
   vong               INT NOT NULL DEFAULT 1 COMMENT 'Vòng phỏng vấn (BR10-1)',
   INDEX ix_lich_ns_time (ma_nhan_su, thoi_gian_bat_dau),  -- kiểm tra trùng lịch BR10-2
@@ -315,10 +316,25 @@ CREATE TABLE YEU_CAU_HO_TRO (
   CONSTRAINT ck_yc_tt CHECK (trang_thai IN ('Chờ xử lý','Đã xử lý'))
 ) ENGINE=InnoDB;
 
+-- ---------- Lần gửi đề cử cho khách hàng (tệp đính kèm, lời nhắn) — Fix demo 3 (2) ----------
+CREATE TABLE GUI_KHACH_HANG (
+  ma_lan_gui        INT AUTO_INCREMENT PRIMARY KEY,
+  ma_chi_tiet_du_an INT NOT NULL,
+  ma_nguoi_gui      INT NOT NULL,
+  ngay_gui          DATETIME(3) NOT NULL,
+  so_ung_vien       INT NOT NULL,
+  dinh_kem_cv       TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Gửi kèm CV của từng ứng viên',
+  tep_danh_sach     VARCHAR(255) NULL COMMENT 'Tệp danh sách đề cử (Excel .xlsx / Google Sheet); NULL = không gửi',
+  loi_nhan          TEXT NULL COMMENT 'Lời nhắn gửi khách hàng',
+  ds_de_cu          VARCHAR(1000) NOT NULL COMMENT 'Mã các đề cử trong lần gửi',
+  CONSTRAINT fk_gkh_ct FOREIGN KEY (ma_chi_tiet_du_an) REFERENCES CHI_TIET_DU_AN(ma_chi_tiet_du_an),
+  CONSTRAINT fk_gkh_ns FOREIGN KEY (ma_nguoi_gui) REFERENCES NHAN_SU(ma_nhan_su)
+) ENGINE=InnoDB;
+
 -- ---------- Quy tắc xếp lịch phỏng vấn (màn hình "Quy tắc xếp lịch phỏng vấn" — BR10-6) ----------
 CREATE TABLE QUY_TAC_XEP_LICH (
   ma_quy_tac         INT AUTO_INCREMENT PRIMARY KEY,
-  khoang_nghi_phut   INT NOT NULL DEFAULT 30  COMMENT 'Khoảng nghỉ tối thiểu giữa hai buổi liên tiếp',
+  khoang_nghi_phut   INT NOT NULL DEFAULT 60  COMMENT 'Khoảng nghỉ tối thiểu giữa hai buổi liên tiếp',
   di_chuyen_phut     INT NOT NULL DEFAULT 90  COMMENT 'Thời gian di chuyển giữa hai khu vực khác nhau',
   gio_bat_dau        CHAR(5) NOT NULL DEFAULT '08:00' COMMENT 'Giờ làm việc bắt đầu (HH:MM)',
   gio_ket_thuc       CHAR(5) NOT NULL DEFAULT '18:00' COMMENT 'Giờ làm việc kết thúc (HH:MM)',

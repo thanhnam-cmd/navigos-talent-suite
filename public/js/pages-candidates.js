@@ -19,7 +19,6 @@ Pages.candidates = {
       <div class="grid g-4 kpis mb">
         ${[['Tổng hồ sơ trong kho', all.length, 'users', 'tone-blue'], ['Sẵn sàng đề cử (Hoạt động)', all.filter((u) => u.trang_thai === ST.UV.HD).length, 'userCheck', 'tone-green'], ['Đang thử việc', all.filter((u) => u.trang_thai === ST.UV.TV).length, 'briefcase', 'tone-violet'], ['Chưa chuẩn hóa', all.filter((u) => !u.ma_nhan_su && u.trang_thai === ST.UV.HD).length, 'tag', 'tone-amber']]
           .map(([l, n, ic, t]) => `<div class="card kpi"><div><div class="label">${l}</div><div class="value">${n}</div></div><div class="ico ${t}">${icon(ic)}</div></div>`).join('')}</div>
-      ${recommendMode ? `<div class="callout mb">${icon('info', 'sm')}<div><b>Chế độ đề cử</b> — chỉ lọc ứng viên <b>Hoạt động</b>; ứng viên đã nhận việc (Đang thử việc) hoặc Lưu trữ <b>không xuất hiện</b>. Ứng viên chưa apply được gắn nhãn <span class="badge sm amber">Chưa apply</span> để chủ động liên hệ khảo sát nguyện vọng.</div></div>` : ''}
       <div class="card"><div class="toolbar"><div class="grow input-ico">${icon('search', 'sm')}<input class="input" id="q" placeholder="Tìm theo tên, email, SĐT, kỹ năng, mã UV…" value="${esc(f.q)}"></div>
         ${!this.adv ? `<select class="select" id="tt" style="width:auto">${[['', 'Mọi trạng thái'], ...Object.values(ST.UV).map((x) => [x, x])].map(([a, b]) => `<option value="${a}" ${f.trang_thai === a ? 'selected' : ''}>${b}</option>`).join('')}</select>
         <select class="select" id="nm" style="width:auto">${[['', 'Chuẩn hóa: tất cả'], ['no', 'Chưa chuẩn hóa'], ['yes', 'Đã chuẩn hóa']].map(([a, b]) => `<option value="${a}" ${f.normalized === a ? 'selected' : ''}>${b}</option>`).join('')}</select>` : ''}</div>
@@ -63,22 +62,33 @@ Pages.candidates = {
     const pg = paginate(rows, this.page, 12);
     const fitTone = (x) => (x >= 75 ? ['var(--green-50)', 'var(--green)'] : x >= 50 ? ['var(--amber-50)', 'var(--amber)'] : ['var(--slate-50)', 'var(--text-2)']);
     const blocked = (r) => r.hs && [ST.HS.PV, ST.HS.TV, ST.HS.LOAI].includes(r.hs.trang_thai) || (r.hs && DB.de_cu.some((d) => d.ma_ho_so_ung_vien === r.hs.id && [ST.DC.CHO, ST.DC.SUA, ST.DC.DUYET].includes(d.trang_thai)));
-    box.innerHTML = `<div class="table-wrap"><table class="table responsive"><thead><tr>${recommend ? '<th style="width:36px"></th>' : ''}<th class="stt">STT</th><th>Ứng viên</th>${recommend ? '<th>Độ phù hợp</th>' : ''}<th>Chuyên môn · Cấp bậc</th><th>Kinh nghiệm</th><th>Khu vực</th><th>Kỹ năng</th><th>${recommend ? 'Với dự án này' : 'Trạng thái'}</th></tr></thead><tbody>
+    box.innerHTML = `<div class="table-wrap"><table class="table responsive"><thead><tr>${recommend ? '<th style="width:36px"></th>' : ''}<th class="stt">STT</th><th>Ứng viên</th>${recommend ? `<th class="nowrap">Độ phù hợp <button type="button" class="icon-btn xs" id="fitHelp" title="Cách tính độ phù hợp">${icon('info', 'sm')}</button></th>` : ''}<th>Chuyên môn · Cấp bậc</th><th>Kinh nghiệm</th><th>Khu vực</th><th>Kỹ năng</th><th>${recommend ? 'Với dự án này' : 'Trạng thái'}</th></tr></thead><tbody>
       ${pg.rows.map((r, i) => { const u = r.uv; const age = Q.age(u); const blk = recommend && blocked(r); const [bg, fg] = fitTone(r.fit ?? 0);
         return `<tr class="clickable" data-uv="${u.id}">
         <td class="stt">${(pg.page - 1) * 12 + i + 1}</td>
         ${recommend ? `<td data-label="Chọn"><input type="checkbox" data-pick="${u.id}" ${this.picked.has(u.id) ? 'checked' : ''} ${blk ? 'disabled title="Hồ sơ đang được xử lý ở dự án này"' : ''} style="width:18px;height:18px;accent-color:var(--primary)"></td>` : ''}
         <td class="cell-main"><div class="person">${avatar(u.ho_ten)}<div style="min-width:0"><div class="nm">${esc(u.ho_ten)} ${!Q.isNormalized(u) ? '<span class="badge sm sky">Chưa chuẩn hóa</span>' : ''}</div><div class="sb">${Code.uv(u.id)} · ${age ? age + ' tuổi · ' : ''}${esc(u.so_dien_thoai)}</div></div></div></td>
-        ${recommend ? `<td data-label="Độ phù hợp"><span class="fit"><span class="ring" style="background:${bg};color:${fg}">${r.fit}%</span></span></td>` : ''}
+        ${recommend ? `<td data-label="Độ phù hợp"><button type="button" class="fit" data-fit="${u.id}" title="Xem cách tính"><span class="ring" style="background:${bg};color:${fg}">${r.fit}%</span></button></td>` : ''}
         <td data-label="Chuyên môn">${esc(Store.name('chuyen_mon', u.ma_chuyen_mon))}<div class="t-sub">${esc(Store.name('cap_bac', u.ma_cap_bac))}</div></td>
         <td data-label="Kinh nghiệm" class="nowrap">${u.so_nam_kinh_nghiem ?? '—'} năm</td><td data-label="Khu vực">${esc(Store.name('khu_vuc', u.ma_khu_vuc))}</td>
         <td data-label="Kỹ năng" style="max-width:240px">${String(u.ky_nang || '').split(',').filter(Boolean).slice(0, 3).map((s) => `<span class="tag">${esc(s.trim())}</span>`).join('')}</td>
         <td data-label="${recommend ? 'Với dự án' : 'Trạng thái'}">${recommend ? (r.hs ? badge(r.hs.trang_thai) + (r.hs.ma_tin_kenh ? '' : ' <span class="badge sm amber">Chưa apply</span>') : '<span class="badge amber">Chưa apply</span>') : badge(u.trang_thai)}</td></tr>`; }).join('') || `<tr><td colspan="8">${emptyState(this.adv ? 'Không có ứng viên “Hoạt động” phù hợp tiêu chí. Hãy điều chỉnh bộ lọc.' : 'Không có ứng viên phù hợp')}</td></tr>`}
       </tbody></table></div>${pagerHtml(pg, 'ứng viên')}`;
-    $$('tr[data-uv]', box).forEach((tr) => (tr.onclick = (e) => { if (e.target.closest('input')) return; Router.go('#/ung-vien/' + tr.dataset.uv); }));
+    $$('tr[data-uv]', box).forEach((tr) => (tr.onclick = (e) => { if (e.target.closest('input,button')) return; Router.go('#/ung-vien/' + tr.dataset.uv); }));
+    $$('[data-fit]', box).forEach((b) => (b.onclick = () => Pages.candidates.fitDialog(Q.uv(b.dataset.fit), Q.ct(f.ct))));
+    $('#fitHelp', box) && ($('#fitHelp', box).onclick = () => Pages.candidates.fitDialog(null, Q.ct(f.ct)));
     $$('[data-pick]', box).forEach((c) => (c.onchange = () => { const id = Number(c.dataset.pick); c.checked ? this.picked.add(id) : this.picked.delete(id); this.selbar(); }));
     $$('[data-page]', box).forEach((b) => (b.onclick = () => { this.page = Number(b.dataset.page); this.list(); }));
     this.selbar();
+  },
+  /** Độ phù hợp: công thức chung (uv = null) hoặc điểm từng tiêu chí của một ứng viên với vị trí */
+  fitDialog(uv, ct) {
+    const d = uv ? Q.fitDetail(uv, ct) : null;
+    modal({ size: 'lg', title: uv ? `Độ phù hợp — ${esc(uv.ho_ten)} · <span class="code">${d.score}%</span>` : 'Cách tính độ phù hợp', foot: '<button class="btn primary" data-close>Đóng</button>',
+      body: `<p class="small" style="margin-top:0">Độ phù hợp ứng viên với vị trí <b>${esc(ct.vi_tri)}</b> (${Code.ct(ct.id)}) tính trên thang <b>100 điểm</b> = tổng điểm 5 tiêu chí; dùng để sắp xếp gợi ý, không thay thế đánh giá của nhân viên.</p>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Tiêu chí</th><th class="num">Tối đa</th><th>Cách cho điểm</th>${uv ? '<th>Ứng viên</th><th>Vị trí yêu cầu</th><th class="num">Điểm</th>' : ''}</tr></thead><tbody>
+        ${(d ? d.parts : Q.FIT_RULES.map(([label, w, rule]) => ({ label, w, rule }))).map((x) => `<tr><td class="strong">${x.label}</td><td class="num">${x.w}</td><td class="small">${esc(x.rule)}</td>${uv ? `<td class="small">${esc(x.uv)}</td><td class="small">${esc(x.ct)}</td><td class="num strong" style="color:var(--${x.got === x.w ? 'green' : x.got ? 'amber' : 'text-2'})">${x.got}</td>` : ''}</tr>`).join('')}
+        <tr class="total"><td>Tổng</td><td class="num">100</td><td></td>${uv ? `<td></td><td></td><td class="num">${d.score}</td>` : ''}</tr></tbody></table></div>` });
   },
   selbar() {
     const bar = $('#selbar'); if (!bar) return; const f = this.f;
@@ -96,7 +106,7 @@ Pages.candidates = {
         <div class="table-wrap mt"><table class="table"><thead><tr><th>Ứng viên</th><th>Năm KN</th><th>Lương mong muốn (VND)</th><th>Notice period</th></tr></thead><tbody>
         ${ids.map((id) => { const u = Q.uv(id); const hs = DB.ho_so_ung_tuyen.find((h) => h.ma_ung_vien === id && h.ma_chi_tiet_du_an === ct.id); return `<tr><td><div class="nm small strong">${esc(u.ho_ten)}</div><div class="t-sub">${hs ? (hs.ma_tin_kenh ? 'Đã apply' : 'Đã có hồ sơ') : '<span style="color:var(--amber)">Chưa apply → hệ thống tạo hồ sơ ứng tuyển</span>'}</div></td>
           <td><input class="input" style="width:80px" name="exp_${id}" type="number" step="0.5" value="${u.so_nam_kinh_nghiem ?? ''}"></td><td><input class="input" name="sal_${id}" type="number" placeholder="VD: 30000000"></td><td><input class="input" name="np_${id}" value="30 ngày"></td></tr>`; }).join('')}</tbody></table></div>
-        <div class="callout mt">${icon('info', 'sm')}<div>Đề cử lưu ở trạng thái <b>Chờ duyệt</b>; hồ sơ chuyển <b>Đề cử</b> và được ghi lịch sử. Chỉ đề cử đã được Quản lý duyệt mới được gửi khách hàng.</div></div></form>` });
+</form>` });
     submitForm(m, (v) => {
       const per = {}; ids.forEach((id) => (per[id] = { exp: v['exp_' + id] === '' ? null : Number(v['exp_' + id]), salary: v['sal_' + id], notice: v['np_' + id] }));
       const r = Svc.createRecommendations(ct.id, ids, { dot_de_cu: v.dot_de_cu, ghi_chu: v.ghi_chu, per });

@@ -30,7 +30,6 @@ Store.reset = function () { const r = Api.call('POST', '/api/reset'); if (r.ok) 
 Auth.restore = function () { const r = Api.call('GET', '/api/me'); Api.apply(r); };
 Auth.login = function (username, password) { const r = Api.call('POST', '/api/login', { username, password }); if (!r.ok) return r; Api.apply(r); return { ok: true }; };
 Auth.logout = function () { Api.call('POST', '/api/logout'); this.user = null; Store.db = Store.empty(); location.hash = '#/login'; };
-Auth.switchTo = function (id) { const r = Api.call('POST', '/api/switch', { id }); if (r.ok) Api.apply(r); return r; };
 
 /* ----- Nghiệp vụ: thực thi trên máy chủ. Các hàm chỉ đọc vẫn chạy tại chỗ ----- */
 const LOCAL_ONLY = new Set(['filterCandidates', 'suggestStaff', 'genPassword', '_withdrawActive', 'ingest']);

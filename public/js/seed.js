@@ -59,8 +59,8 @@ const Seed = (() => {
     /* --- Quy tắc xếp lịch phỏng vấn (BR10-6) --- */
     ins('quy_tac_xep_lich', { ...Q.RULE_DEFAULTS, ngay_cap_nhat: nowISO(), ma_nguoi_cap_nhat: null });
 
-    /* --- Nhân sự (mật khẩu demo: 123456) --- */
-    const pw = hashPw('123456');
+    /* --- Nhân sự (mật khẩu riêng của từng tài khoản do máy chủ gán — server/accounts.js) --- */
+    const pw = hashPw(Svc.genPassword());
     const NS = (ho_ten, ten_dang_nhap, vai_tro, chuc_vu, kv, email, tt = 'Đang làm việc') => ins('nhan_su', { ho_ten, ten_dang_nhap, mat_khau: pw, email, so_dien_thoai: '09' + int(10000000, 99999999), chuc_vu, vai_tro, ma_khu_vuc: kv, trang_thai_lam_viec: tt });
     const admin = NS('Nguyễn Quản Trị', 'admin', ROLES.ADMIN, 'Chuyên viên IT', 1, 'admin@navigosgroup.com');
     const gd = NS('Trần Minh Đức', 'giamdoc', ROLES.BGD, 'Giám đốc Navigos Group Việt Nam', 1, 'duc.tran@navigosgroup.com');
@@ -169,7 +169,7 @@ const Seed = (() => {
       const future = target === 'pv_len'; const ivDay = new Date(); if (future) ivDay.setDate(ivDay.getDate() + int(0, 4)); else { ivDay.setTime(App.clock); ivDay.setDate(ivDay.getDate() + 1); }
       while ([0, 6].includes(ivDay.getDay())) ivDay.setDate(ivDay.getDate() + 1); // lịch mẫu rơi vào ngày làm việc
       let ok = null;
-      for (let k = 0; k < 8 && !ok?.ok; k++) { hourSlot = hourSlot >= 16 ? 8 : hourSlot + 1; const off = rand() < 0.5;
+      for (let k = 0; k < 8 && !ok?.ok; k++) { hourSlot = hourSlot >= 16 ? 8 : hourSlot + 1; const off = rand() < 0.5 && staff.ma_khu_vuc === ct.ma_khu_vuc; // trực tiếp: nhân viên cùng khu vực địa điểm
         ok = Svc.saveInterview(hs.id, { ngay: toDateStr(ivDay), gio_bd: `${pad(hourSlot)}:00`, gio_kt: `${pad(hourSlot)}:45`, hinh_thuc: off ? 'Trực tiếp' : 'Trực tuyến', dia_diem_link: off ? `Văn phòng ${Q.khOfCt(ct).ten_cong_ty.replace(/^Công ty (CP|TNHH) /, '')} — ${Store.name('khu_vuc', ct.ma_khu_vuc)}` : `https://meet.google.com/${strip(uv.ho_ten).slice(0, 3)}-${int(1000, 9999)}-nvg`, ma_nhan_su: staff.id, nguoi_tham_gia_cong_ty: `${staff.ho_ten} (Navigos)`, nguoi_tham_gia_khach_hang: Q.khOfCt(ct).nguoi_lien_he, xac_nhan_canh_bao: true }); }
       if (future) return hs;
       const lich = Q.lichOfHs(hs.id).at(-1); App.clock = new Date(lich.thoi_gian_ket_thuc).getTime() + 3600000; Auth.user = staff;

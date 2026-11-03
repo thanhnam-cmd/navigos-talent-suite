@@ -18,7 +18,9 @@ async function call(method, url, body) {
   const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
   return { status: r.status, data: await r.json() };
 }
-const login = (u, p = '123456') => call('POST', '/api/login', { username: u, password: p });
+// Mật khẩu lấy từ TAI_KHOAN_DANG_NHAP.md (tệp chỉ có trên máy, không đưa lên git)
+const PW = (() => { try { return Object.fromEntries([...require('fs').readFileSync(require('path').join(__dirname, '..', 'TAI_KHOAN_DANG_NHAP.md'), 'utf8').matchAll(/^\| (\w+) \| `([^`]+)` \|/gm)].map((m) => [m[1], m[2]])); } catch (e) { return {}; } })();
+const login = (u, p = PW[u] || '') => call('POST', '/api/login', { username: u, password: p });
 const rpc = async (fn, ...args) => { const d = (await call('POST', '/api/rpc', { fn, args })).data; return d.ok ? d.result : d; };
 
 async function sqlCount(sql, params) {

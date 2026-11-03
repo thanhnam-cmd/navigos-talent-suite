@@ -11,7 +11,6 @@ const ctOpts = (filter = (c) => c.trang_thai === ST.CT.DANG) => [['', '— Chọ
 Pages.login = {
   render(root) {
     if (Auth.user) return Router.go('#/');
-    const demo = [['admin', 'Quản trị viên', 'Tài khoản & phân quyền'], ['giamdoc', 'Ban Giám đốc', 'Xem, góp ý đề cử, báo cáo'], ['quanly', 'Quản lý', 'Phân công, duyệt đề cử'], ['nhanvien', 'Nhân viên', 'Xử lý hồ sơ, đề cử, phỏng vấn']];
     root.innerHTML = `<div class="login-page">
       <section class="login-art">
         <img class="brand-logo" src="assets/logo-white.png" alt="Navigos Group">
@@ -29,24 +28,22 @@ Pages.login = {
         <h1>Talent Suite</h1><p class="lead">Hệ thống quản lý dự án tuyển dụng nội bộ</p>
         <form id="lf" novalidate class="stack" style="gap:14px">
           <div class="field"><label>Email hoặc tên đăng nhập</label><div class="input-ico">${icon('mail', 'sm')}<input class="input" name="u" autocomplete="username" placeholder="name@navigosgroup.com"></div></div>
-          <div class="field"><label>Mật khẩu</label><div class="input-ico">${icon('lock', 'sm')}<input class="input" type="password" name="p" autocomplete="current-password" placeholder="Nhập mật khẩu"></div></div>
+          <div class="field"><label>Mật khẩu</label><div class="input-ico">${icon('lock', 'sm')}<input class="input" type="password" name="p" autocomplete="current-password" placeholder="Nhập mật khẩu"><button type="button" class="pw-eye" id="pwEye" title="Hiện / ẩn mật khẩu" aria-label="Hiện / ẩn mật khẩu">${icon('eye', 'sm')}</button></div></div>
           <div id="lerr"></div>
           <button class="btn primary block" type="submit">Đăng nhập ${icon('arrowRight', 'sm')}</button>
         </form>
-        <div class="divider">TÀI KHOẢN DEMO · MẬT KHẨU 123456</div>
-        <div class="demo-accounts">${demo.map(([u, r, d]) => `<button type="button" data-u="${u}"><b>${r}</b><span class="muted">${d}</span></button>`).join('')}</div>
         <p class="muted small" style="text-align:center;margin:16px 0 0">Tài khoản do Quản trị viên cấp. Quên mật khẩu? Liên hệ Quản trị viên để đặt lại.</p>
       </div></section></div>`;
     const f = $('#lf');
+    $('#pwEye').onclick = () => { f.p.type = f.p.type === 'password' ? 'text' : 'password'; f.p.focus(); };
     f.onsubmit = (e) => {
       e.preventDefault(); const v = Form.values(f);
       if (!v.u || !v.p) { $('#lerr').innerHTML = `<div class="callout red">${icon('alert', 'sm')} Vui lòng nhập tên đăng nhập và mật khẩu.</div>`; return; }
-      const r = Auth.login(v.u, v.p);
+      const r = Auth.login(v.u.trim(), v.p);
       if (!r.ok) { $('#lerr').innerHTML = `<div class="callout red">${icon('alert', 'sm')} ${esc(r.error)}</div>`; return; }
       const back = App.afterLogin && App.afterLogin !== '/login' ? App.afterLogin : '/'; App.afterLogin = null;
       document.body.innerHTML = ''; location.hash = '#' + back; Router.resolve();
     };
-    $$('[data-u]').forEach((b) => (b.onclick = () => { f.u.value = b.dataset.u; f.p.value = '123456'; f.requestSubmit(); }));
   },
 };
 

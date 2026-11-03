@@ -1,6 +1,6 @@
 /* ==========================================================
    repository.js — Ánh xạ giữa mô hình dữ liệu ứng dụng và
-   19 bảng MySQL; đọc toàn bộ khi khởi động và ghi thay đổi
+   24 bảng MySQL; đọc toàn bộ khi khởi động và ghi thay đổi
    (INSERT / UPDATE / DELETE) trong một giao dịch sau mỗi thao tác.
    ========================================================== */
 const fs = require('fs');
@@ -32,6 +32,7 @@ const MAP = {
   quy_tac_xep_lich: { sql: 'QUY_TAC_XEP_LICH', pk: 'ma_quy_tac' },
   gop_y_de_cu: { sql: 'GOP_Y_DE_CU', pk: 'ma_gop_y' },
   yeu_cau_ho_tro: { sql: 'YEU_CAU_HO_TRO', pk: 'ma_yeu_cau' },
+  gui_khach_hang: { sql: 'GUI_KHACH_HANG', pk: 'ma_lan_gui' },
 };
 const ORDER = Object.keys(MAP); // thứ tự cha → con (đảm bảo khóa ngoại khi INSERT)
 const LOG_COLS = ['thoi_diem', 'nguoi', 'kenh', 'url', 'tong', 'moi', 'trung', 'gan', 'cho_gan', 'bo_qua'];
@@ -124,6 +125,20 @@ class Repository {
       console.log('• Migration: tạo bảng YEU_CAU_HO_TRO');
     }
     await c.query("UPDATE NHAN_SU SET chuc_vu = 'Giám đốc Navigos Group Việt Nam' WHERE chuc_vu = 'Giám đốc Navigos Search'");
+    // 8) Fix demo 3 (2): khu vực địa điểm phỏng vấn, lần gửi khách hàng, khoảng nghỉ 60 phút, bỏ mật khẩu demo 123456
+    if (!(await hasCol('LICH_PHONG_VAN', 'ma_khu_vuc'))) {
+      await c.query("ALTER TABLE LICH_PHONG_VAN ADD COLUMN ma_khu_vuc INT NULL COMMENT 'Khu vực địa điểm phỏng vấn trực tiếp — nhân viên phỏng vấn phải cùng khu vực' AFTER ghi_chu, ADD CONSTRAINT fk_lich_kv FOREIGN KEY (ma_khu_vuc) REFERENCES KHU_VUC(ma_khu_vuc)");
+      await c.query("UPDATE LICH_PHONG_VAN l JOIN HO_SO_UNG_TUYEN h ON h.ma_ho_so_ung_vien = l.ma_ho_so_ung_vien JOIN CHI_TIET_DU_AN ct ON ct.ma_chi_tiet_du_an = h.ma_chi_tiet_du_an SET l.ma_khu_vuc = ct.ma_khu_vuc WHERE l.hinh_thuc = 'Trực tiếp'");
+      console.log('• Migration: LICH_PHONG_VAN thêm ma_khu_vuc');
+    }
+    if (!(await has('GUI_KHACH_HANG'))) {
+      await c.query(fs.readFileSync(path.join(this.cfg.ROOT, 'database', 'schema.sql'), 'utf8').match(/CREATE TABLE GUI_KHACH_HANG[\s\S]*?ENGINE=InnoDB;/)[0]);
+      console.log('• Migration: tạo bảng GUI_KHACH_HANG');
+    }
+    await c.query('UPDATE QUY_TAC_XEP_LICH SET khoang_nghi_phut = 60 WHERE khoang_nghi_phut < 60');
+    const demoHash = require('crypto').createHash('sha256').update('navigos::123456').digest('hex'); let changed = 0;
+    for (const [u, h] of Object.entries(require('./accounts'))) changed += (await c.query('UPDATE NHAN_SU SET mat_khau = ? WHERE ten_dang_nhap = ? AND mat_khau = ?', [h, u, demoHash]))[0].affectedRows;
+    if (changed) console.log(`• Migration: thay mật khẩu demo của ${changed} tài khoản bằng mật khẩu riêng`);
   }
 
   async connect() {

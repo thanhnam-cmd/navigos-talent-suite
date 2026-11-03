@@ -133,7 +133,7 @@ const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hi
 const DB_KEY = 'navigos_talent_db_v3';
 const TABLES = ['khu_vuc', 'linh_vuc', 'cap_bac', 'chuyen_mon', 'nhan_su', 'khach_hang', 'du_an_tuyen_dung', 'chi_tiet_du_an',
   'kenh_dang_tuyen', 'tin_dang', 'phan_cong', 'ung_vien', 'ho_so_ung_tuyen', 'lich_su_trang_thai', 'de_cu', 'lich_phong_van',
-  'ket_qua_phong_van', 'feedback', 'ket_qua_tuyen_dung', 'quy_tac_xep_lich', 'gop_y_de_cu', 'yeu_cau_ho_tro'];
+  'ket_qua_phong_van', 'feedback', 'ket_qua_tuyen_dung', 'quy_tac_xep_lich', 'gop_y_de_cu', 'yeu_cau_ho_tro', 'gui_khach_hang'];
 
 const Store = {
   db: null,
@@ -173,7 +173,6 @@ const Auth = {
     this.user = u; try { sessionStorage.setItem('navigos_uid', u.id); } catch (e) { /* bỏ qua */ }
     return { ok: true };
   },
-  switchTo(id) { this.user = Store.get('nhan_su', id); try { sessionStorage.setItem('navigos_uid', id); } catch (e) { /* bỏ qua */ } return { ok: true }; },
   logout() { this.user = null; try { sessionStorage.removeItem('navigos_uid'); } catch (e) { /* bỏ qua */ } location.hash = '#/login'; },
   role() { return this.user?.vai_tro; },
   isAdmin() { return this.role() === ROLES.ADMIN; },
@@ -337,7 +336,7 @@ const Form = {
     else input = `<input class="input" type="${type}" name="${name}" value="${esc(value)}" placeholder="${esc(ph)}" ${attrs}>`;
     return `<div class="field ${full ? 'full' : ''}"><label>${label}${req ? ' <span class="req">*</span>' : ''}</label>${input}${hint ? `<div class="hint">${hint}</div>` : ''}</div>`;
   },
-  opts(table, { blank = null, filter = null } = {}) { let rows = DB[table]; if (filter) rows = rows.filter(filter); return [...(blank !== null ? [['', blank]] : []), ...rows.map((r) => [r.id, r.ten])]; },
+  opts(table, { blank = null, filter = null } = {}) { let rows = DB[table]; if (filter) rows = rows.filter(filter); return [...(blank !== null ? [['', blank]] : []), ...rows.map((r) => [r.id, r.ten ?? r.ten_cong_ty ?? r.ho_ten])]; },
 };
 
 /* ---------- Badge trạng thái ---------- */
@@ -399,16 +398,59 @@ const Charts = {
 };
 
 /* ---------- Xuất Excel (.xls) / PDF (in) ---------- */
+/* ---------- Tệp Excel .xlsx (Office Open XML trong gói ZIP kiểu lưu trữ — không cần thư viện ngoài) ---------- */
+const Xlsx = {
+  crc(b) {
+    const T = this.T || (this.T = [...Array(256)].map((_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; }));
+    let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0;
+  },
+  zip(files) {
+    const enc = new TextEncoder(); const u16 = (v) => [v & 255, (v >>> 8) & 255]; const u32 = (v) => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+    const local = [], central = []; let off = 0;
+    files.forEach(({ name, text }) => {
+      const nm = enc.encode(name), data = enc.encode(text), crc = this.crc(data), meta = [...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(nm.length), ...u16(0)];
+      const head = new Uint8Array([...u32(0x04034b50), ...u16(20), ...meta]); local.push(head, nm, data);
+      central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...meta, ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+      off += head.length + nm.length + data.length;
+    });
+    const size = central.reduce((a, b) => a + b.length, 0);
+    return new Blob([...local, ...central, new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(size), ...u32(off), ...u16(0)])],
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  },
+  /** Một trang tính: dòng tiêu đề, dòng thông tin, dòng trống, hàng tiêu đề cột (cố định khi cuộn) và dữ liệu */
+  build(sheetName, title, sub, headers, rows) {
+    const x = (s) => String(s ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    const col = (i) => (i >= 26 ? String.fromCharCode(64 + Math.floor(i / 26)) : '') + String.fromCharCode(65 + (i % 26));
+    const lines = [[title], [sub], [], headers, ...rows]; const st = (ri) => (ri === 0 ? 2 : ri === 3 ? 1 : ri > 3 ? 3 : 0);
+    const cell = (v, r, c, s) => (typeof v === 'number' && isFinite(v) ? `<c r="${col(c)}${r}" s="${s}"><v>${v}</v></c>` : `<c r="${col(c)}${r}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${x(v)}</t></is></c>`);
+    const data = lines.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => cell(v, ri + 1, ci, st(ri))).join('')}</row>`).join('');
+    const w = headers.map((h, i) => Math.min(55, Math.max(8, String(h).length + 3, ...rows.map((r) => String(r[i] ?? '').length + 2))));
+    const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'; const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    const xf = (f, fill, b, al = '') => `<xf numFmtId="0" fontId="${f}" fillId="${fill}" borderId="${b}" xfId="0"${f ? ' applyFont="1"' : ''}${fill ? ' applyFill="1"' : ''}${b ? ' applyBorder="1"' : ''}${al ? ' applyAlignment="1">' + al + '</xf>' : '/>'}`;
+    const bd = '<left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="thin"><color rgb="FFCBD5E1"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom><diagonal/>';
+    return this.zip([
+      { name: '[Content_Types].xml', text: `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>` },
+      { name: '_rels/.rels', text: `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+      { name: 'xl/workbook.xml', text: `${XML}<workbook ${NS} xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${x(String(sheetName).replace(/[[\]:*?/\\]/g, ' ').slice(0, 31))}" sheetId="1" r:id="rId1"/></sheets></workbook>` },
+      { name: 'xl/_rels/workbook.xml.rels', text: `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+      { name: 'xl/styles.xml', text: `${XML}<styleSheet ${NS}><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="14"/><color rgb="FF283583"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF283583"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border>${bd}</border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4">${xf(0, 0, 0)}${xf(1, 2, 1, '<alignment vertical="center" wrapText="1"/>')}${xf(2, 0, 0)}${xf(0, 0, 1, '<alignment vertical="top" wrapText="1"/>')}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>` },
+      { name: 'xl/worksheets/sheet1.xml', text: `${XML}<worksheet ${NS}><sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${w.map((v, i) => `<col min="${i + 1}" max="${i + 1}" width="${v}" customWidth="1"/>`).join('')}</cols><sheetData>${data}</sheetData></worksheet>` },
+    ]);
+  },
+};
 const Export = {
-  excel(filename, title, headers, rows) {
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>
-      <h3>${esc(title)}</h3><p>Xuất lúc ${fmtDT(new Date())} — Người xuất: ${esc(Auth.user?.ho_ten)}</p>
-      <table border="1"><thead><tr>${headers.map((h) => `<th style="background:#283583;color:#fff">${esc(h)}</th>`).join('')}</tr></thead>
-      <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></body></html>`;
-    const blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename + '.xls'; document.body.appendChild(a); a.click(); a.remove();
+  download(blob, name) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    toast('Đã xuất tệp Excel: ' + esc(filename) + '.xls');
+  },
+  excel(filename, title, headers, rows, { silent = false } = {}) {
+    this.download(Xlsx.build(title, title, `Xuất lúc ${fmtDT(new Date())} — Người xuất: ${Auth.user?.ho_ten || ''}`, headers, rows), filename + '.xlsx');
+    if (!silent) toast('Đã xuất tệp Excel: ' + esc(filename) + '.xlsx');
+  },
+  /** CSV UTF-8 — mở trực tiếp bằng Google Sheets (Tệp → Nhập) */
+  csv(filename, headers, rows) {
+    const q = (v) => (/[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? ''));
+    this.download(new Blob(['\ufeff' + [headers, ...rows].map((r) => r.map(q).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
   },
   pdf() { $$('.toast').forEach((t) => t.remove()); window.print(); },
 };
