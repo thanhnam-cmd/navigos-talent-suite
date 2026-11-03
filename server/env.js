@@ -24,6 +24,7 @@ function loadEnv() {
   return {
     ROOT,
     APP_PORT: Number(e.PORT || e.APP_PORT || 8080), // Render cấp cổng qua biến PORT
+    HOST: e.HOST || '0.0.0.0', // VPS sau Nginx: HOST=127.0.0.1 để chỉ nhận kết nối nội bộ
     DB_HOST: url.host || e.DB_HOST || '127.0.0.1',
     DB_PORT: Number(url.port || e.DB_PORT || 3307),
     DB_NAME: url.db || e.DB_NAME || 'navigos_talent',

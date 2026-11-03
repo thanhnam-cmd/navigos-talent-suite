@@ -198,7 +198,7 @@ async function main() {
     try { if (url.pathname.startsWith('/api/')) await api(req, res, url); else serveStatic(req, res, url); }
     catch (e) { console.error('✖', e); if (!res.headersSent) send(res, 500, { ok: false, error: e.message }); }
   });
-  server.listen(cfg.APP_PORT, '0.0.0.0', () => console.log(`\n✔ Navigos Talent Suite: http://localhost:${cfg.APP_PORT}  (MySQL ${cfg.DB_HOST}:${cfg.DB_PORT}/${cfg.DB_NAME})\n`));
+  server.listen(cfg.APP_PORT, cfg.HOST, () => console.log(`\n✔ Navigos Talent Suite: http://localhost:${cfg.APP_PORT}  (MySQL ${cfg.DB_HOST}:${cfg.DB_PORT}/${cfg.DB_NAME})\n`));
 }
 
 main().catch((e) => { console.error('✖ Không khởi động được máy chủ:', e.message); process.exit(1); });

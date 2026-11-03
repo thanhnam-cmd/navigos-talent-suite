@@ -8,3 +8,8 @@ logs/
 navigos-talent/
 TAI_KHOAN_DANG_NHAP.md
 RENDER_BIEN_MOI_TRUONG.txt
+deploy/*.sql
+deploy/*.err
+deploy/.env.server
+deploy/TAO_CSDL_AAPANEL.txt
+deploy/navigos_deploy.pub
