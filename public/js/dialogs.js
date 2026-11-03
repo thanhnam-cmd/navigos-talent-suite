@@ -466,5 +466,53 @@ const Dlg = {
         ${id ? Form.field('Trạng thái làm việc', 'trang_thai_lam_viec', { value: n.trang_thai_lam_viec, opts: ['Đang làm việc', 'Đã nghỉ việc'] }) : `<div class="full callout">${icon('lock', 'sm')}<div>Mật khẩu khởi tạo được hệ thống sinh ngẫu nhiên, <b>lưu dạng mã hóa SHA-256</b> và chỉ hiển thị một lần.</div></div>`}</form>` });
     submitForm(m, (v) => { const r = Svc.saveAccount(v, id); if (r.ok) { m.close(); UI.refresh(); if (r.password) Dlg.showPassword(r.row, r.password); else toast('Đã cập nhật tài khoản'); } return r; });
   },
+  /** Quên mật khẩu: người dùng gửi yêu cầu cho Quản trị viên; Quản trị viên tự đặt lại bằng mã khôi phục */
+  forgotPassword(name = '') {
+    const m = modal({ title: 'Quên mật khẩu', foot: `<button class="btn" data-close>Đóng</button><button class="btn primary" data-submit>${icon('send', 'sm')} Gửi yêu cầu</button>`,
+      body: `<div class="seg seg-lg mb" id="fpTab"><button type="button" class="on" data-t="user">Gửi yêu cầu cấp lại</button><button type="button" data-t="admin">Tôi là Quản trị viên</button></div>
+        <form novalidate class="form-grid" id="fpUser" style="grid-template-columns:1fr">
+          <p class="small t2" style="margin:0">Yêu cầu được gửi tới Quản trị viên. Quản trị viên đặt lại mật khẩu và gửi mật khẩu mới cho bạn qua kênh liên hệ bên dưới.</p>
+          ${Form.field('Tên đăng nhập hoặc email', 'username', { req: true, value: name, ph: 'VD: nhanvien hoặc tram.dao@navigosgroup.com' })}
+          ${Form.field('Số điện thoại / email để liên hệ lại', 'lien_he', { ph: 'VD: 0912 345 678' })}
+          ${Form.field('Ghi chú cho Quản trị viên', 'ghi_chu', { type: 'textarea', ph: 'Không bắt buộc' })}</form>
+        <form novalidate class="form-grid" id="fpAdmin" style="grid-template-columns:1fr" hidden>
+          <p class="small t2" style="margin:0">Quản trị viên quên mật khẩu: nhập <b>mã khôi phục</b> được giao khi bàn giao hệ thống để tự đặt mật khẩu mới.</p>
+          ${Form.field('Tên đăng nhập Quản trị viên', 'username', { req: true, value: name, ph: 'VD: admin' })}
+          ${Form.field('Mã khôi phục', 'code', { req: true, ph: 'NVG-XXXX-XXXX', attrs: 'autocomplete="off" style="text-transform:uppercase"' })}
+          ${Form.field('Mật khẩu mới', 'password', { type: 'password', req: true, hint: 'Tối thiểu 6 ký tự.', attrs: 'autocomplete="new-password"' })}
+          ${Form.field('Nhập lại mật khẩu mới', 'password2', { type: 'password', req: true, attrs: 'autocomplete="new-password"' })}</form>
+        <div id="fpDone"></div>` });
+    let tab = 'user'; const fu = m.$('#fpUser'), fa = m.$('#fpAdmin'), btn = m.$('[data-submit]');
+    m.$$('#fpTab [data-t]').forEach((b) => (b.onclick = () => { tab = b.dataset.t; m.$$('#fpTab [data-t]').forEach((x) => x.classList.toggle('on', x === b)); fu.hidden = tab !== 'user'; fa.hidden = tab !== 'admin';
+      btn.innerHTML = tab === 'user' ? `${icon('send', 'sm')} Gửi yêu cầu` : `${icon('check', 'sm')} Đặt mật khẩu mới`; m.$('#fpDone').innerHTML = ''; }));
+    btn.onclick = (e) => {
+      e.preventDefault();
+      if (tab === 'user') {
+        const v = Form.values(fu); if (!v.username.trim()) return Form.showErrors(fu, { username: 'Nhập tên đăng nhập hoặc email.' });
+        const r = Api.call('POST', '/api/forgot', v); if (!r.ok) return r.errors ? Form.showErrors(fu, r.errors) : toast(r.error, 'err');
+        fu.hidden = true; m.$('#fpTab').hidden = true; btn.hidden = true;
+        m.$('#fpDone').innerHTML = `<div class="callout green">${icon('checkCircle', 'sm')}<div><b>${esc(r.message)}</b><div class="small mt-sm">Cần gấp? Liên hệ trực tiếp Quản trị viên:</div>${Dlg.adminContacts()}</div></div>`;
+      } else {
+        const v = Form.values(fa); const er = {};
+        if (!v.username.trim()) er.username = 'Nhập tên đăng nhập.'; if (!v.code.trim()) er.code = 'Nhập mã khôi phục.';
+        if (v.password.length < 6) er.password = 'Mật khẩu mới tối thiểu 6 ký tự.'; else if (v.password !== v.password2) er.password2 = 'Mật khẩu nhập lại không khớp.';
+        if (Object.keys(er).length) return Form.showErrors(fa, er);
+        const r = Api.call('POST', '/api/recover', { username: v.username, code: v.code, password: v.password });
+        if (!r.ok) return r.errors ? Form.showErrors(fa, r.errors) : toast(r.error, 'err');
+        m.close(); toast(r.message); const lf = $('#lf'); if (lf) { lf.u.value = v.username; lf.p.value = ''; lf.p.focus(); }
+      }
+    };
+  },
+  /** Danh sách Quản trị viên kèm email / điện thoại bấm được */
+  adminContacts() {
+    const r = Api.call('GET', '/api/contact'); const list = r.ok ? r.admins : [];
+    return list.length ? `<div class="stack mt-sm" style="gap:8px">${list.map((a) => `<div class="contact-card">${avatar(a.ho_ten, 'sm')}<div style="flex:1;min-width:0"><b>${esc(a.ho_ten)}</b><div class="muted small">${esc(a.chuc_vu)} · Quản trị viên</div></div>
+      <a class="btn sm" href="mailto:${esc(a.email)}?subject=${encodeURIComponent('Yêu cầu hỗ trợ tài khoản Navigos Talent Suite')}">${icon('mail', 'sm')} ${esc(a.email)}</a>${a.so_dien_thoai ? `<a class="btn sm" href="tel:${esc(String(a.so_dien_thoai).replace(/\s+/g, ''))}">${icon('phone', 'sm')} ${esc(a.so_dien_thoai)}</a>` : ''}</div>`).join('')}</div>` : '<div class="muted small mt-sm">Chưa có thông tin Quản trị viên.</div>';
+  },
+  contactAdmin() {
+    const m = modal({ title: 'Liên hệ Quản trị viên', foot: `<button class="btn" data-close>Đóng</button><button class="btn primary" id="toForgot">${icon('lock', 'sm')} Gửi yêu cầu cấp lại mật khẩu</button>`,
+      body: `<p class="small t2" style="margin-top:0">Quản trị viên cấp tài khoản, phân quyền và đặt lại mật khẩu. Bấm email hoặc số điện thoại để liên hệ.</p>${Dlg.adminContacts()}` });
+    m.$('#toForgot').onclick = () => { m.close(); Dlg.forgotPassword($('#lf')?.u.value.trim() || ''); };
+  },
   showPassword(n, pw) { modal({ size: 'sm', title: 'Mật khẩu khởi tạo', foot: '<button class="btn primary" data-close>Đã ghi nhận</button>', body: `<p style="margin-top:0">Tài khoản <b>${esc(n.ten_dang_nhap)}</b> (${esc(n.ho_ten)})</p><div class="code" style="font-size:20px;padding:12px 16px;display:block;text-align:center;letter-spacing:.1em">${esc(pw)}</div><p class="muted small">Mật khẩu chỉ hiển thị một lần. Hãy gửi cho nhân sự qua kênh nội bộ an toàn.</p>` }); },
 };

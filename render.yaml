@@ -16,6 +16,11 @@ services:
         generateValue: true
       - key: DEMO_MODE
         value: "true"
+      # Mã băm mật khẩu ban đầu và mã khôi phục Quản trị viên — nhập trong Dashboard (không lưu trong kho mã)
+      - key: NTS_ACCOUNTS
+        sync: false
+      - key: NTS_RECOVERY
+        sync: false
     # Gói Free không có ổ đĩa: dữ liệu MySQL được khởi tạo lại (kèm dữ liệu mẫu) mỗi lần dịch vụ khởi động.
     # Để giữ dữ liệu vĩnh viễn: đổi plan thành starter và bỏ dấu # ở 4 dòng dưới.
     # disk:

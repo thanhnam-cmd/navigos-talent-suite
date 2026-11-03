@@ -331,6 +331,22 @@ CREATE TABLE GUI_KHACH_HANG (
   CONSTRAINT fk_gkh_ns FOREIGN KEY (ma_nguoi_gui) REFERENCES NHAN_SU(ma_nhan_su)
 ) ENGINE=InnoDB;
 
+-- ---------- Yêu cầu cấp lại mật khẩu (người dùng quên mật khẩu → Quản trị viên xử lý) ----------
+CREATE TABLE YEU_CAU_MAT_KHAU (
+  ma_yeu_cau     INT AUTO_INCREMENT PRIMARY KEY,
+  ma_nhan_su     INT NULL COMMENT 'Tài khoản khớp tên đăng nhập / email; NULL = không tìm thấy',
+  ten_dang_nhap  VARCHAR(100) NOT NULL COMMENT 'Tên đăng nhập hoặc email người dùng nhập',
+  lien_he        VARCHAR(150) NULL COMMENT 'Số điện thoại / email để Quản trị viên liên hệ lại',
+  ghi_chu        VARCHAR(500) NULL,
+  ngay_gui       DATETIME(3) NOT NULL,
+  trang_thai     VARCHAR(20) NOT NULL DEFAULT 'Chờ xử lý',
+  ma_nguoi_xu_ly INT NULL,
+  ngay_xu_ly     DATETIME(3) NULL,
+  CONSTRAINT fk_ymk_ns FOREIGN KEY (ma_nhan_su) REFERENCES NHAN_SU(ma_nhan_su),
+  CONSTRAINT fk_ymk_xl FOREIGN KEY (ma_nguoi_xu_ly) REFERENCES NHAN_SU(ma_nhan_su),
+  CONSTRAINT ck_ymk_tt CHECK (trang_thai IN ('Chờ xử lý','Đã cấp lại','Đã đóng'))
+) ENGINE=InnoDB;
+
 -- ---------- Quy tắc xếp lịch phỏng vấn (màn hình "Quy tắc xếp lịch phỏng vấn" — BR10-6) ----------
 CREATE TABLE QUY_TAC_XEP_LICH (
   ma_quy_tac         INT AUTO_INCREMENT PRIMARY KEY,

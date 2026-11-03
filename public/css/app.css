@@ -594,3 +594,11 @@ button.fit:hover .ring { box-shadow: 0 0 0 2px var(--primary-100); }
 .rp-table.wide { font-size: 10.5px; } .rp-table.wide th { padding: 6px 4px; } .rp-table.wide td { padding: 5px 4px; }
 .rp-table.wide td:nth-child(2) { min-width: 120px; } .rp-table.wide .t-sub { font-size: 9.5px; }
 .rp-table.wide tr.kid td { font-size: 10px; }
+/* Trang đăng nhập: quên mật khẩu, liên hệ Quản trị viên */
+.login-help { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 16px; flex-wrap: wrap; }
+.login-help .sep { width: 1px; height: 16px; background: var(--border); }
+.link-btn { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--primary); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+.link-btn:hover { background: var(--primary-50); }
+.seg.seg-lg { display: flex; } .seg.seg-lg button { flex: 1; padding: 8px 10px; font-size: 13px; }
+.contact-card { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.contact-card a.btn { text-decoration: none; }

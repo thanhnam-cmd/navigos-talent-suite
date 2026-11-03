@@ -7,6 +7,9 @@
      POST /api/logout
      POST /api/rpc               { fn, args }  — gọi nghiệp vụ (services.js) trên máy chủ
      POST /api/reset                           — khôi phục dữ liệu mẫu (chỉ Quản trị viên)
+     GET  /api/contact                         — thông tin liên hệ Quản trị viên (trang đăng nhập)
+     POST /api/forgot            { username, lien_he, ghi_chu } — gửi yêu cầu cấp lại mật khẩu cho Quản trị viên
+     POST /api/recover           { username, code, password }   — Quản trị viên quên mật khẩu: đặt lại bằng mã khôi phục
    ========================================================== */
 const http = require('http');
 const fs = require('fs');
@@ -20,7 +23,8 @@ const cfg = loadEnv();
 const PUBLIC = path.join(cfg.ROOT, 'public');
 const E = createEngine(cfg.ROOT);
 const repo = new Repository(cfg);
-const ACCOUNTS = require('./accounts'); // mã băm mật khẩu ban đầu của từng tài khoản
+const { current: ACCOUNTS, recovery: RECOVERY, configured: ACC_SET } = require('./accounts'); // mã băm mật khẩu ban đầu, mã khôi phục Quản trị viên
+if (!ACC_SET) console.warn('⚠ Chưa đặt biến NTS_ACCOUNTS — dùng mật khẩu ban đầu dự phòng (xem server/accounts.js).');
 const sessions = new Map(); // sid → { uid, at }
 const failed = new Map(); // tên đăng nhập → { n: số lần sai liên tiếp, at }
 const SESSION_TTL = 8 * 3600 * 1000;
@@ -30,13 +34,13 @@ let chain = Promise.resolve();
 const serial = (fn) => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
 
 /* ---------- Phân quyền gọi nghiệp vụ ---------- */
-const ADMIN_FNS = new Set(['saveAccount', 'resetPassword', 'setRole', 'deactivateAccount', 'addCatalog', 'toggleChannel']);
+const ADMIN_FNS = new Set(['saveAccount', 'resetPassword', 'setRole', 'deactivateAccount', 'addCatalog', 'toggleChannel', 'closePasswordRequest']);
 // Bảng phân quyền (Fix Demo lần 1): mặc định mọi thao tác nghiệp vụ chỉ dành cho Nhân viên
 const ADMIN_OR_QL_FNS = new Set([]); // Test demo lần 2: bỏ màn hình Quy tắc xếp lịch — quy tắc là cấu hình hệ thống cố định
 const QL_FNS = new Set(['assign', 'approveRecommendation', 'requestEdit', 'markCommentsSeen', 'closeSupportRequest']);
 const BGD_FNS = new Set(['addRecommendationComment']);
 const ANY_FNS = new Set(['changePassword']);
-const BLOCKED = new Set(['_withdrawActive', 'ingest', 'filterCandidates', 'suggestStaff', 'genPassword']);
+const BLOCKED = new Set(['_withdrawActive', 'ingest', 'filterCandidates', 'suggestStaff', 'genPassword', 'requestPasswordReset', 'closePasswordRequestsOf']);
 
 /* ---------- Tiện ích HTTP ---------- */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json' };
@@ -57,9 +61,10 @@ function newSession(req, uid) {
   return { 'Set-Cookie': `nts_sid=${sid}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL / 1000}${secure}` };
 }
 /** Dữ liệu trả về cho trình duyệt — không bao giờ gửi mật khẩu đã mã hóa */
-const dbJson = () => JSON.stringify(E.Store.db, (k, v) => (k === 'mat_khau' || k === '_seq' ? undefined : v));
+// Yêu cầu cấp lại mật khẩu (kèm số liên hệ) chỉ gửi cho Quản trị viên
+const dbJson = (u) => JSON.stringify(E.Store.db, (k, v) => (k === 'mat_khau' || k === '_seq' || (k === 'yeu_cau_mat_khau' && u?.vai_tro !== 'Quản trị viên') ? undefined : v));
 const userJson = (u) => ({ id: u.id, ho_ten: u.ho_ten, vai_tro: u.vai_tro });
-const payload = (extra, u) => `{"ok":true,"server":${JSON.stringify({ db: cfg.DB_NAME, demo: cfg.DEMO_MODE })}${u ? `,"user":${JSON.stringify(userJson(u))},"db":${dbJson()}` : ''}${extra ? ',' + JSON.stringify(extra).slice(1, -1) : ''}}`;
+const payload = (extra, u) => `{"ok":true,"server":${JSON.stringify({ db: cfg.DB_NAME, demo: cfg.DEMO_MODE })}${u ? `,"user":${JSON.stringify(userJson(u))},"db":${dbJson(u)}` : ''}${extra ? ',' + JSON.stringify(extra).slice(1, -1) : ''}}`;
 
 /** Nếu ghi MySQL lỗi: nạp lại bộ nhớ từ CSDL để không lệch dữ liệu */
 async function persistOrRollback() {
@@ -92,6 +97,44 @@ async function api(req, res, url) {
       failed.delete(key);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...newSession(req, u.id) });
       res.end(payload(null, u));
+    });
+  }
+
+  // ----- Trước khi đăng nhập: liên hệ Quản trị viên, quên mật khẩu, khôi phục tài khoản Quản trị viên -----
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const tooMany = (key, max) => { const f = failed.get(key); return f && f.n >= max && Date.now() - f.at < 5 * 60000; };
+  const bump = (key) => { const x = failed.get(key); failed.set(key, { n: x && Date.now() - x.at < 5 * 60000 ? x.n + 1 : 1, at: Date.now() }); };
+  if (p === '/api/contact') {
+    const admins = E.Store.db.nhan_su.filter((n) => n.vai_tro === 'Quản trị viên' && n.trang_thai_lam_viec === 'Đang làm việc');
+    return send(res, 200, { ok: true, admins: admins.map((n) => ({ ho_ten: n.ho_ten, chuc_vu: n.chuc_vu, email: n.email, so_dien_thoai: n.so_dien_thoai })) });
+  }
+  if (p === '/api/forgot' && req.method === 'POST') {
+    const b = await readBody(req); const name = String(b.username || '').trim().slice(0, 100);
+    if (!name) return send(res, 400, { ok: false, errors: { username: 'Nhập tên đăng nhập hoặc email.' } });
+    if (tooMany('forgot:' + ip, 5)) return send(res, 429, { ok: false, error: 'Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau 5 phút hoặc liên hệ trực tiếp Quản trị viên.' });
+    bump('forgot:' + ip);
+    return serial(async () => {
+      const r = E.Svc.requestPasswordReset(name, String(b.lien_he || '').slice(0, 150), String(b.ghi_chu || '').slice(0, 500));
+      if (r.ok && r.changed) await persistOrRollback();
+      // Không cho biết tài khoản có tồn tại hay không
+      send(res, 200, { ok: true, message: 'Đã gửi yêu cầu tới Quản trị viên. Quản trị viên sẽ cấp lại mật khẩu và liên hệ với bạn.' });
+    });
+  }
+  if (p === '/api/recover' && req.method === 'POST') {
+    const b = await readBody(req); const name = String(b.username || '').trim().toLowerCase(); const key = 'recover:' + ip;
+    if (tooMany(key, 5)) return send(res, 429, { ok: false, error: 'Nhập sai quá 5 lần. Vui lòng thử lại sau 5 phút.' });
+    const code = String(b.code || '').trim().toUpperCase(); const pw = String(b.password || '');
+    if (!RECOVERY) return send(res, 400, { ok: false, error: 'Máy chủ chưa cấu hình mã khôi phục (biến NTS_RECOVERY). Hãy liên hệ người quản lý hệ thống.' });
+    const okCode = crypto.timingSafeEqual(Buffer.from(crypto.createHash('sha256').update('navigos-recovery::' + code).digest('hex')), Buffer.from(RECOVERY));
+    const u = E.Store.db.nhan_su.find((n) => (n.ten_dang_nhap.toLowerCase() === name || n.email.toLowerCase() === name) && n.vai_tro === 'Quản trị viên' && n.trang_thai_lam_viec === 'Đang làm việc');
+    if (!okCode || !u) { bump(key); return send(res, 400, { ok: false, error: 'Tên đăng nhập Quản trị viên hoặc mã khôi phục không đúng.' }); }
+    if (pw.length < 6) return send(res, 400, { ok: false, errors: { password: 'Mật khẩu mới tối thiểu 6 ký tự.' } });
+    return serial(async () => {
+      u.mat_khau = E.hashPw(pw); failed.delete(u.ten_dang_nhap.toLowerCase()); failed.delete(key);
+      E.Svc.closePasswordRequestsOf(u.id, null);
+      await persistOrRollback();
+      console.log(`• Quản trị viên ${u.ten_dang_nhap} đặt lại mật khẩu bằng mã khôi phục`);
+      send(res, 200, { ok: true, message: 'Đã đặt lại mật khẩu Quản trị viên. Hãy đăng nhập bằng mật khẩu mới.' });
     });
   }
 

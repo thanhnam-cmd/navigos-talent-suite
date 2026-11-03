@@ -113,3 +113,15 @@ Nguồn: tệp `Fix demo 3 (2).pdf` (9 trang, ảnh chụp màn hình có khoanh
 | Kiểm tra nhanh toàn hệ thống (`npm test`) | 9/9 |
 | Tệp .xlsx tạo ra mở được bằng thư viện đọc Excel (openpyxl) | Đạt |
 | In PDF thật bằng Chrome (danh sách đề cử, báo cáo tiến độ): không còn ngày giờ, URL; số trang đúng | Đạt |
+
+## Bổ sung: mật khẩu dễ nhớ, quên mật khẩu, liên hệ Quản trị viên
+
+| Yêu cầu | Cách xử lý |
+|---|---|
+| Mật khẩu dễ nhớ, dễ dùng | Mỗi tài khoản có mật khẩu dạng **Tên@4 số**: tên người dùng không dấu, viết hoa chữ đầu, cộng 4 chữ số riêng. Mật khẩu do Quản trị viên đặt lại cũng dễ nhớ: một từ tiếng Việt không dấu + @ + 4 số, ví dụ `Hoasen@4827`. Migration 9 chỉ thay mật khẩu của tài khoản chưa tự đổi. |
+| Nút **Quên mật khẩu?** bấm được | Trang đăng nhập có nút thay cho dòng chữ. Người dùng nhập tên đăng nhập hoặc email, số liên hệ và ghi chú; yêu cầu được lưu vào bảng mới `YEU_CAU_MAT_KHAU`. Thông báo trả về luôn giống nhau, không cho biết tài khoản có tồn tại hay không. Mỗi địa chỉ IP gửi tối đa 5 yêu cầu trong 5 phút. |
+| Nút **Liên hệ Quản trị viên** bấm được | Hiện danh sách Quản trị viên với email (`mailto:`) và số điện thoại (`tel:`) bấm được, kèm nút gửi yêu cầu cấp lại mật khẩu. |
+| Quản trị viên xử lý | Yêu cầu hiện ở 4 nơi: chuông thông báo, số đếm trên menu **Tài khoản & phân quyền**, Trang chủ và đầu trang **Tài khoản**. Bấm **Đặt lại MK** thì mật khẩu mới hiện một lần và yêu cầu tự chuyển "Đã cấp lại". Bấm **Đóng** để bỏ yêu cầu không hợp lệ. Chỉ trình duyệt của Quản trị viên nhận được bảng yêu cầu. |
+| Quản trị viên quên mật khẩu | Vào **Quên mật khẩu? → Tôi là Quản trị viên**, nhập tên đăng nhập, **mã khôi phục** và mật khẩu mới. Mã khôi phục giao riêng cho chủ dự án; máy chủ chỉ lưu mã băm. Nhập sai mã 5 lần thì bị khóa 5 phút. Mã không dùng được cho tài khoản không phải Quản trị viên. |
+
+Kiểm thử: API mật khẩu (mật khẩu dễ nhớ, quên mật khẩu, liên hệ, đặt lại, khôi phục Quản trị viên, phân quyền) đạt 24/24; `npm test` đạt 9/9.

@@ -39,7 +39,7 @@ async function sqlCount(sql, params) {
 
   let r = await login('nhanvien');
   ok(r.status === 200 && r.data.user.vai_tro === 'Nhân viên', 'Đăng nhập Nhân viên');
-  ok(!JSON.stringify(r.data.db).includes('mat_khau'), 'Dữ liệu trả về không chứa mật khẩu');
+  ok(!/"mat_khau":/.test(JSON.stringify(r.data.db)) && !r.data.db.yeu_cau_mat_khau, 'Dữ liệu trả về không chứa mật khẩu, yêu cầu cấp lại mật khẩu');
   ok((await rpc('approveRecommendation', 1)).ok === false, 'Nhân viên không được duyệt đề cử (BR6-4)');
   ok((await call('POST', '/api/rpc', { fn: 'saveAccount', args: [{}] })).status === 403, 'Nhân viên không được quản lý tài khoản (BR2-3)');
 

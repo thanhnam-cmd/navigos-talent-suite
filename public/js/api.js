@@ -32,7 +32,7 @@ Auth.login = function (username, password) { const r = Api.call('POST', '/api/lo
 Auth.logout = function () { Api.call('POST', '/api/logout'); this.user = null; Store.db = Store.empty(); location.hash = '#/login'; };
 
 /* ----- Nghiệp vụ: thực thi trên máy chủ. Các hàm chỉ đọc vẫn chạy tại chỗ ----- */
-const LOCAL_ONLY = new Set(['filterCandidates', 'suggestStaff', 'genPassword', '_withdrawActive', 'ingest']);
+const LOCAL_ONLY = new Set(['filterCandidates', 'suggestStaff', 'genPassword', '_withdrawActive', 'ingest', 'requestPasswordReset', 'closePasswordRequestsOf']);
 Object.keys(Svc).filter((fn) => !LOCAL_ONLY.has(fn)).forEach((fn) => {
   Svc[fn] = (...args) => {
     const r = Api.call('POST', '/api/rpc', { fn, args });

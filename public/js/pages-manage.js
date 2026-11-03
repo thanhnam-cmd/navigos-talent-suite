@@ -216,7 +216,13 @@ Pages.accounts = {
   render(v) {
     const f = this.f;
     const rows = DB.nhan_su.filter((n) => (!f.q || norm(n.ho_ten + ' ' + n.ten_dang_nhap + ' ' + n.email).includes(norm(f.q))) && (!f.role || n.vai_tro === f.role) && (!f.kv || n.ma_khu_vuc === Number(f.kv)));
+    const reqs = (DB.yeu_cau_mat_khau || []).filter((y) => y.trang_thai === 'Chờ xử lý').sort((a, b) => b.ngay_gui.localeCompare(a.ngay_gui));
     v.innerHTML = `<div class="page-head"><div><h1>Tài khoản & phân quyền</h1><p>Mỗi tài khoản gắn với một vai trò; quyền truy cập chức năng xác định theo vai trò.</p></div><div class="actions"><button class="btn primary" id="add">${icon('plus', 'sm')} Thêm tài khoản</button></div></div>
+      ${reqs.length ? `<div class="card mb" style="border-color:var(--amber)"><div class="card-head"><div><h3>${icon('lock', 'sm')} Yêu cầu cấp lại mật khẩu <span class="badge amber sm">${reqs.length}</span></h3><p>Người dùng bấm “Quên mật khẩu” ở trang đăng nhập. Đặt lại rồi gửi mật khẩu mới cho họ qua kênh liên hệ.</p></div></div>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Tài khoản</th><th>Liên hệ lại</th><th>Ghi chú</th><th>Gửi lúc</th><th></th></tr></thead><tbody>
+        ${reqs.map((y) => { const n = y.ma_nhan_su ? Q.ns(y.ma_nhan_su) : null; return `<tr><td>${n ? `<div class="person">${avatar(n.ho_ten, 'sm')}<div><div class="nm small">${esc(n.ho_ten)}</div><div class="sb"><span class="code">${esc(n.ten_dang_nhap)}</span> · ${esc(n.vai_tro)}${n.trang_thai_lam_viec !== 'Đang làm việc' ? ' · <span style="color:var(--red)">Đã nghỉ việc</span>' : ''}</div></div></div>` : `<span class="code">${esc(y.ten_dang_nhap)}</span> <span class="badge sm red">Không có tài khoản này</span>`}</td>
+          <td class="small">${esc(y.lien_he || '—')}${n ? `<div class="t-sub">${esc(n.email)}${n.so_dien_thoai ? ' · ' + esc(n.so_dien_thoai) : ''}</div>` : ''}</td><td class="small">${esc(y.ghi_chu || '—')}</td><td class="small nowrap">${fmtDT(y.ngay_gui)}</td>
+          <td><div class="row" style="gap:4px;justify-content:flex-end">${n && n.trang_thai_lam_viec === 'Đang làm việc' ? `<button class="btn xs primary" data-rq-pw="${n.id}">${icon('lock', 'sm')} Đặt lại MK</button>` : ''}<button class="btn xs" data-rq-close="${y.id}">Đóng</button></div></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
       <div class="card"><div class="toolbar"><div class="grow input-ico">${icon('search', 'sm')}<input class="input" id="q" placeholder="Tìm theo họ tên, tên đăng nhập, email…" value="${esc(f.q)}"></div>
         <select class="select" id="role" style="width:auto">${[['', 'Mọi vai trò'], ...Object.values(ROLES).map((r) => [r, r])].map(([a, b]) => `<option value="${a}" ${f.role === a ? 'selected' : ''}>${b}</option>`).join('')}</select>
         <select class="select" id="kv" style="width:auto">${Form.opts('khu_vuc', { blank: 'Mọi khu vực' }).map(([a, b]) => `<option value="${a}" ${String(f.kv) === String(a) ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
@@ -232,7 +238,10 @@ Pages.accounts = {
     $('#q').oninput = debounce((e) => { f.q = e.target.value; UI.refresh(); $('#q').focus(); $('#q').setSelectionRange(f.q.length, f.q.length); }, 300);
     $('#role').onchange = (e) => { f.role = e.target.value; UI.refresh(); }; $('#kv').onchange = (e) => { f.kv = e.target.value; UI.refresh(); };
     $$('[data-ed]', v).forEach((b) => (b.onclick = () => Dlg.account(Number(b.dataset.ed))));
-    $$('[data-pw]', v).forEach((b) => (b.onclick = () => confirmBox({ title: 'Đặt lại mật khẩu', message: 'Hệ thống sinh mật khẩu mới, mã hóa và lưu.', okText: 'Đặt lại', onOk: () => { const n = Q.ns(b.dataset.pw); const r = Svc.resetPassword(n.id); Dlg.showPassword(n, r.password); } })));
+    const resetPw = (id) => confirmBox({ title: 'Đặt lại mật khẩu', message: `Hệ thống sinh mật khẩu mới cho <b>${esc(Q.ns(id).ho_ten)}</b>, mã hóa và lưu. Mật khẩu cũ không dùng được nữa.`, okText: 'Đặt lại', onOk: () => { const n = Q.ns(id); const r = Svc.resetPassword(n.id); if (!r.ok) return toast(r.error, 'err'); UI.refresh(); Dlg.showPassword(n, r.password); } });
+    $$('[data-pw]', v).forEach((b) => (b.onclick = () => resetPw(Number(b.dataset.pw))));
+    $$('[data-rq-pw]', v).forEach((b) => (b.onclick = () => resetPw(Number(b.dataset.rqPw))));
+    $$('[data-rq-close]', v).forEach((b) => (b.onclick = () => after(Svc.closePasswordRequest(Number(b.dataset.rqClose)), 'Đã đóng yêu cầu')));
     $$('[data-off]', v).forEach((b) => (b.onclick = () => confirmBox({ title: 'Chuyển trạng thái “Đã nghỉ việc”', danger: true, okText: 'Xác nhận', message: 'Tài khoản đã phát sinh dữ liệu không bị xóa. Tài khoản sẽ không đăng nhập được; các phân công đang phụ trách chuyển “Đã chuyển”.', onOk: () => after(Svc.deactivateAccount(Number(b.dataset.off)), 'Đã cập nhật trạng thái') })));
     $$('[data-role]', v).forEach((s) => (s.onchange = () => after(Svc.setRole(Number(s.dataset.role), s.value), 'Đã gán vai trò ' + s.value)));
   },

@@ -32,9 +32,11 @@ Pages.login = {
           <div id="lerr"></div>
           <button class="btn primary block" type="submit">Đăng nhập ${icon('arrowRight', 'sm')}</button>
         </form>
-        <p class="muted small" style="text-align:center;margin:16px 0 0">Tài khoản do Quản trị viên cấp. Quên mật khẩu? Liên hệ Quản trị viên để đặt lại.</p>
+        <div class="login-help"><button type="button" class="link-btn" id="forgotBtn">${icon('lock', 'sm')} Quên mật khẩu?</button><span class="sep"></span><button type="button" class="link-btn" id="contactBtn">${icon('phone', 'sm')} Liên hệ Quản trị viên</button></div>
       </div></section></div>`;
     const f = $('#lf');
+    $('#forgotBtn').onclick = () => Dlg.forgotPassword(f.u.value.trim());
+    $('#contactBtn').onclick = () => Dlg.contactAdmin();
     $('#pwEye').onclick = () => { f.p.type = f.p.type === 'password' ? 'text' : 'password'; f.p.focus(); };
     f.onsubmit = (e) => {
       e.preventDefault(); const v = Form.values(f);
@@ -121,6 +123,7 @@ Pages.home = {
       <div class="grid g-2 mt">
         <div class="card"><div class="card-head"><h3>Tài khoản theo khu vực</h3></div><div class="card-body">${Charts.bars({ data: DB.khu_vuc.map((k) => ({ label: k.ten, value: ns.filter((n) => n.ma_khu_vuc === k.id && n.trang_thai_lam_viec === 'Đang làm việc').length })) })}</div></div>
         <div class="card"><div class="card-head"><h3>Tác vụ quản trị</h3></div><div class="card-body stack">
+          ${Shell.counts().yeuCauMatKhau ? `<a class="alert" href="#/tai-khoan" style="text-decoration:none;color:inherit;border-color:var(--amber)"><span class="ico tone-amber">${icon('lock', 'sm')}</span><div><div class="tt">${Shell.counts().yeuCauMatKhau} yêu cầu cấp lại mật khẩu đang chờ</div><div class="ds">Người dùng quên mật khẩu — đặt lại và gửi mật khẩu mới cho họ</div></div></a>` : ''}
           <a class="alert" href="#/tai-khoan" style="text-decoration:none;color:inherit"><span class="ico tone-blue">${icon('plus', 'sm')}</span><div><div class="tt">Thêm tài khoản cho nhân sự mới</div><div class="ds">Mật khẩu khởi tạo được sinh tự động & mã hóa</div></div></a>
           <a class="alert" href="#/tai-khoan" style="text-decoration:none;color:inherit"><span class="ico tone-violet">${icon('shield', 'sm')}</span><div><div class="tt">Phân quyền truy cập theo vai trò</div><div class="ds">Quản trị viên · Ban Giám đốc · Quản lý · Nhân viên</div></div></a>
           <a class="alert" href="#/danh-muc" style="text-decoration:none;color:inherit"><span class="ico tone-green">${icon('layers', 'sm')}</span><div><div class="tt">Danh mục dùng chung</div><div class="ds">Khu vực, lĩnh vực, cấp bậc, chuyên môn, kênh đăng tuyển</div></div></a>

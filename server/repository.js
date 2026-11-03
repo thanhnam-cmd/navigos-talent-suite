@@ -33,6 +33,7 @@ const MAP = {
   gop_y_de_cu: { sql: 'GOP_Y_DE_CU', pk: 'ma_gop_y' },
   yeu_cau_ho_tro: { sql: 'YEU_CAU_HO_TRO', pk: 'ma_yeu_cau' },
   gui_khach_hang: { sql: 'GUI_KHACH_HANG', pk: 'ma_lan_gui' },
+  yeu_cau_mat_khau: { sql: 'YEU_CAU_MAT_KHAU', pk: 'ma_yeu_cau' },
 };
 const ORDER = Object.keys(MAP); // thứ tự cha → con (đảm bảo khóa ngoại khi INSERT)
 const LOG_COLS = ['thoi_diem', 'nguoi', 'kenh', 'url', 'tong', 'moi', 'trung', 'gan', 'cho_gan', 'bo_qua'];
@@ -136,9 +137,14 @@ class Repository {
       console.log('• Migration: tạo bảng GUI_KHACH_HANG');
     }
     await c.query('UPDATE QUY_TAC_XEP_LICH SET khoang_nghi_phut = 60 WHERE khoang_nghi_phut < 60');
-    const demoHash = require('crypto').createHash('sha256').update('navigos::123456').digest('hex'); let changed = 0;
-    for (const [u, h] of Object.entries(require('./accounts'))) changed += (await c.query('UPDATE NHAN_SU SET mat_khau = ? WHERE ten_dang_nhap = ? AND mat_khau = ?', [h, u, demoHash]))[0].affectedRows;
-    if (changed) console.log(`• Migration: thay mật khẩu demo của ${changed} tài khoản bằng mật khẩu riêng`);
+    // 9) Quên mật khẩu: bảng yêu cầu cấp lại; mật khẩu ban đầu dễ nhớ (chỉ thay tài khoản chưa tự đổi mật khẩu)
+    if (!(await has('YEU_CAU_MAT_KHAU'))) {
+      await c.query(fs.readFileSync(path.join(this.cfg.ROOT, 'database', 'schema.sql'), 'utf8').match(/CREATE TABLE YEU_CAU_MAT_KHAU[\s\S]*?ENGINE=InnoDB;/)[0]);
+      console.log('• Migration: tạo bảng YEU_CAU_MAT_KHAU');
+    }
+    const { current, previous } = require('./accounts'); let changed = 0;
+    for (const [u, h] of Object.entries(current)) changed += (await c.query('UPDATE NHAN_SU SET mat_khau = ? WHERE ten_dang_nhap = ? AND mat_khau IN (?)', [h, u, previous[u] || ['-']]))[0].affectedRows;
+    if (changed) console.log(`• Migration: cập nhật mật khẩu ban đầu của ${changed} tài khoản`);
   }
 
   async connect() {

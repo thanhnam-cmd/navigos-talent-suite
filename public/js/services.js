@@ -239,8 +239,27 @@ const Svc = {
     const n = Store.insert('nhan_su', { ...row, mat_khau: hashPw(pw), trang_thai_lam_viec: 'Đang làm việc' });
     Store.save(); return { ok: true, row: n, password: pw };
   },
-  genPassword() { const c = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; let s = ''; for (let i = 0; i < 10; i++) s += c[Math.floor(Math.random() * c.length)]; return s; },
-  resetPassword(id) { const pw = Svc.genPassword(); Q.ns(id).mat_khau = hashPw(pw); Store.save(); return { ok: true, password: pw }; },
+  /** Mật khẩu dễ nhớ: một từ tiếng Việt không dấu + @ + 4 chữ số (VD: Hoasen@4827) */
+  genPassword() { const w = ['Hoasen', 'Mattroi', 'Bienxanh', 'Songhong', 'Nuicao', 'Muaxuan', 'Saobang', 'Lavang', 'Caytre', 'Hoamai', 'Hoadao', 'Trangram', 'Thuytien', 'Bauroi', 'Comxanh', 'Gioxuan'];
+    const r = (n) => Math.floor(Math.random() * n); return `${w[r(w.length)]}@${1000 + r(9000)}`; },
+  resetPassword(id) { const pw = Svc.genPassword(); Q.ns(id).mat_khau = hashPw(pw); Svc.closePasswordRequestsOf(Number(id), 'Đã cấp lại'); Store.save(); return { ok: true, password: pw }; },
+  /** Người dùng quên mật khẩu (chưa đăng nhập) → gửi yêu cầu cho Quản trị viên; mỗi tài khoản chỉ một yêu cầu đang chờ */
+  requestPasswordReset(name, lienHe = '', ghiChu = '') {
+    const u = DB.nhan_su.find((x) => norm(x.ten_dang_nhap) === norm(name) || norm(x.email) === norm(name));
+    const dup = (DB.yeu_cau_mat_khau || []).find((y) => y.trang_thai === 'Chờ xử lý' && (u ? y.ma_nhan_su === u.id : norm(y.ten_dang_nhap) === norm(name)));
+    if (dup) { if (lienHe) dup.lien_he = lienHe; if (ghiChu) dup.ghi_chu = ghiChu; dup.ngay_gui = nowISO(); return { ok: true, changed: true }; }
+    Store.insert('yeu_cau_mat_khau', { ma_nhan_su: u?.id ?? null, ten_dang_nhap: name, lien_he: lienHe || null, ghi_chu: ghiChu || null, ngay_gui: nowISO(), trang_thai: 'Chờ xử lý', ma_nguoi_xu_ly: null, ngay_xu_ly: null });
+    Store.save(); return { ok: true, changed: true };
+  },
+  closePasswordRequestsOf(nsId, status) {
+    (DB.yeu_cau_mat_khau || []).filter((y) => y.trang_thai === 'Chờ xử lý' && y.ma_nhan_su === nsId)
+      .forEach((y) => Object.assign(y, { trang_thai: status || 'Đã cấp lại', ma_nguoi_xu_ly: Auth.user?.id ?? null, ngay_xu_ly: nowISO() }));
+  },
+  /** Quản trị viên đóng yêu cầu không cần cấp lại (không đúng tài khoản, đã liên hệ…) */
+  closePasswordRequest(id) {
+    const y = Store.get('yeu_cau_mat_khau', id); if (!y || y.trang_thai !== 'Chờ xử lý') return fail('Yêu cầu không còn chờ xử lý.');
+    Object.assign(y, { trang_thai: 'Đã đóng', ma_nguoi_xu_ly: Auth.user.id, ngay_xu_ly: nowISO() }); Store.save(); return { ok: true };
+  },
   setRole(id, role) { if (!Auth.isAdmin()) return fail('Chỉ Quản trị viên được phân quyền.'); Q.ns(id).vai_tro = role; Store.save(); return { ok: true }; },
   /** BR2-4: tài khoản đã phát sinh dữ liệu không xóa — chuyển "Đã nghỉ việc" */
   deactivateAccount(id) {
@@ -885,9 +904,11 @@ const Shell = {
       chuaChuanHoa: DB.ung_vien.filter((u) => !u.ma_nhan_su && u.trang_thai === ST.UV.HD).length,
       pvHomNay: DB.lich_phong_van.filter((l) => l.trang_thai === ST.LICH.LEN && toDateStr(l.thoi_gian_bat_dau) === t && (Auth.isLead() || (ctIds.has(Q.hs(l.ma_ho_so_ung_vien).ma_chi_tiet_du_an) && Q.lichVisible(l)))).length,
       yeuCauHoTro: Auth.isQL() ? Q.supportRequests().length : 0,
+      yeuCauMatKhau: Auth.isAdmin() ? (DB.yeu_cau_mat_khau || []).filter((y) => y.trang_thai === 'Chờ xử lý').length : 0,
     };
   },
   notifications() {
+    if (Auth.isAdmin()) { const n = this.counts().yeuCauMatKhau; return n ? [{ ic: 'lock', tone: 'amber', title: `${n} yêu cầu cấp lại mật khẩu`, desc: 'Người dùng quên mật khẩu — đặt lại và gửi mật khẩu mới cho họ', href: '#/tai-khoan' }] : []; }
     if (!Auth.canWork()) return [];
     const out = []; const c = this.counts();
     Q.visibleCts().forEach((ct) => { const dl = Q.deadline(ct); if (dl) out.push({ ic: 'clock', tone: dl.level, title: `${ct.vi_tri} — ${dl.text}`, desc: `${Code.ct(ct.id)} · ${Q.khOfCt(ct)?.ten_cong_ty} · ${Q.hired(ct.id)}/${ct.so_luong} đã nhận việc`, href: '#/du-an/' + ct.id }); });
