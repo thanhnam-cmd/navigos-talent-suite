@@ -125,3 +125,13 @@ Nguồn: tệp `Fix demo 3 (2).pdf` (9 trang, ảnh chụp màn hình có khoanh
 | Quản trị viên quên mật khẩu | Vào **Quên mật khẩu? → Tôi là Quản trị viên**, nhập tên đăng nhập, **mã khôi phục** và mật khẩu mới. Mã khôi phục giao riêng cho chủ dự án; máy chủ chỉ lưu mã băm. Nhập sai mã 5 lần thì bị khóa 5 phút. Mã không dùng được cho tài khoản không phải Quản trị viên. |
 
 Kiểm thử: API mật khẩu (mật khẩu dễ nhớ, quên mật khẩu, liên hệ, đặt lại, khôi phục Quản trị viên, phân quyền) đạt 24/24; `npm test` đạt 9/9.
+
+## Fix demo 3 (4)
+
+| # | Nhận xét | Cách xử lý |
+|---|---|---|
+| 1 | Sau khi bấm gửi khách hàng không được tự tải tệp xuống; form chỉ để gửi | Bỏ việc tạo và tải tệp danh sách khi bấm **Xác nhận gửi**. Bấm gửi chỉ chuyển đề cử sang "Đã gửi khách hàng", lưu lần gửi (tệp đính kèm đã chọn, lời nhắn) rồi đóng form. Trong form vẫn có **Xem** CV và **Xem trước** danh sách. |
+| 2 | Các nút thao tác (kể cả ở màn khác) đổi hết thành icon, di chuột vào hiện tooltip | Thêm hàm dùng chung `act()` tạo nút icon và một tooltip chung: nền tối, tên thao tác in đậm kèm dòng mô tả, ví dụ "Gửi khách hàng / Gửi đề cử này cho Bà Nguyễn Thu Trang". Tooltip đặt ở `<body>` nên không bị bảng cuộn che. Đã đổi **43 nút** ở các màn: danh sách đề cử, hồ sơ ứng tuyển, quản lý phỏng vấn, kết quả tuyển dụng, thu thập hồ sơ, tài khoản, danh mục, báo cáo, hộp thoại gắn mã tin. Màu nút theo loại thao tác: xanh dương là thao tác chính, xanh lá là duyệt / ghi nhận, viền đỏ là gỡ / hủy, còn lại là xem / sửa. |
+| 3 | Chỗ "Độ phù hợp" lúc bị bôi vàng lúc không | Vệt vàng là đánh dấu của trình duyệt khi tìm hoặc chọn chữ trên trang. Nhãn cột nay hiển thị bằng CSS và tiêu đề bảng không bôi chọn được, nên không còn bị đánh dấu. Sửa thêm lỗi lệch cột: tiêu đề "STT" đang nằm trên cột ô chọn. |
+
+Sửa thêm trong lúc rà soát: tab **Kết quả phỏng vấn** của trang Kết quả tuyển dụng bị lỗi tràn ngăn xếp, do một hàm cục bộ trùng tên `act`. Đã đổi tên hàm. Đã rà 121 màn hình và tab với 5 tài khoản (Nhân viên phụ trách, Nhân viên hỗ trợ, Quản lý, Ban Giám đốc, Quản trị viên): không còn lỗi hiển thị.

@@ -128,6 +128,25 @@ const ICONS = {
   layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
 };
 const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
+/** Nút thao tác dạng icon trong bảng / thẻ; di chuột vào hiện tooltip (tên thao tác + mô tả). tone: '' | primary | success | danger */
+const act = (ic, tip, attrs = '', tone = '', sub = '') => `<button type="button" class="act ${tone}" data-tip="${esc(tip)}" data-tip-sub="${esc(sub)}" aria-label="${esc(tip)}" ${attrs}>${icon(ic, 'sm')}</button>`;
+/* Tooltip dùng chung cho mọi phần tử có data-tip (đặt ở <body> nên không bị bảng cuộn che mất) */
+(() => {
+  if (typeof document === 'undefined' || !document.createElement) return;
+  let tip = null, cur = null;
+  const hide = () => { if (tip) tip.hidden = true; cur = null; };
+  const show = (el) => {
+    if (!tip) { tip = document.createElement('div'); tip.className = 'tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+    cur = el; const sub = el.dataset.tipSub;
+    tip.innerHTML = `<b>${esc(el.dataset.tip)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}`; tip.hidden = false;
+    const r = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
+    let top = r.bottom + 8; if (top + t.height > innerHeight - 8) top = r.top - t.height - 8;
+    tip.style.top = `${Math.max(8, top)}px`; tip.style.left = `${Math.min(innerWidth - t.width - 8, Math.max(8, r.left + r.width / 2 - t.width / 2))}px`;
+  };
+  document.addEventListener('mouseover', (e) => { const el = e.target.closest && e.target.closest('[data-tip]'); if (el !== cur) (el ? show(el) : hide()); });
+  document.addEventListener('focusin', (e) => { const el = e.target.closest && e.target.closest('[data-tip]'); el ? show(el) : hide(); });
+  ['scroll', 'click', 'keydown'].forEach((ev) => document.addEventListener(ev, hide, true));
+})();
 
 /* ---------- Kho dữ liệu (19 bảng theo ERD — Hình 3.26) ---------- */
 const DB_KEY = 'navigos_talent_db_v3';
@@ -443,14 +462,9 @@ const Export = {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   },
-  excel(filename, title, headers, rows, { silent = false } = {}) {
+  excel(filename, title, headers, rows) {
     this.download(Xlsx.build(title, title, `Xuất lúc ${fmtDT(new Date())} — Người xuất: ${Auth.user?.ho_ten || ''}`, headers, rows), filename + '.xlsx');
-    if (!silent) toast('Đã xuất tệp Excel: ' + esc(filename) + '.xlsx');
-  },
-  /** CSV UTF-8 — mở trực tiếp bằng Google Sheets (Tệp → Nhập) */
-  csv(filename, headers, rows) {
-    const q = (v) => (/[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? ''));
-    this.download(new Blob(['\ufeff' + [headers, ...rows].map((r) => r.map(q).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
+    toast('Đã xuất tệp Excel: ' + esc(filename) + '.xlsx');
   },
   pdf() { $$('.toast').forEach((t) => t.remove()); window.print(); },
 };

@@ -602,3 +602,16 @@ button.fit:hover .ring { box-shadow: 0 0 0 2px var(--primary-100); }
 .seg.seg-lg { display: flex; } .seg.seg-lg button { flex: 1; padding: 8px 10px; font-size: 13px; }
 .contact-card { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
 .contact-card a.btn { text-decoration: none; }
+/* Nút thao tác dạng icon + tooltip (Fix demo 3 (4)) */
+.act { width: 30px; height: 30px; display: inline-grid; place-items: center; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--text-2); cursor: pointer; padding: 0; flex: none; transition: background .12s, border-color .12s, color .12s; vertical-align: middle; }
+.act:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-50); }
+.act.primary { background: var(--primary); border-color: var(--primary); color: #fff; } .act.primary:hover { filter: brightness(1.08); color: #fff; }
+.act.success { background: var(--green); border-color: var(--green); color: #fff; } .act.success:hover { filter: brightness(1.08); color: #fff; }
+.act.danger { color: var(--red); border-color: #f5c2c7; } .act.danger:hover { background: #fdecee; border-color: var(--red); color: var(--red); }
+.act:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.act + .act { margin-left: 4px; }
+.tip { position: fixed; z-index: 3000; max-width: 260px; background: #111827; color: #fff; border-radius: 8px; padding: 7px 10px; font-size: 12px; line-height: 1.35; box-shadow: 0 8px 24px rgba(15, 23, 42, .25); pointer-events: none; }
+.tip b { display: block; font-weight: 600; } .tip span { display: block; color: #cbd5e1; font-size: 11px; margin-top: 2px; }
+/* Tiêu đề bảng không bôi chọn được; nhãn "Độ phù hợp" vẽ bằng CSS nên không bị đánh dấu khi tìm/chọn chữ */
+.table th { user-select: none; -webkit-user-select: none; }
+.th-fit::before { content: attr(data-label); }

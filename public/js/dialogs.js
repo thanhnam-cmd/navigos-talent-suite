@@ -87,7 +87,7 @@ const Dlg = {
         ${Form.field('Mã tin đăng trên kênh', 'ma_tin_kenh', { req: true, ph: 'VD: VNW-58231' })}
         ${Form.field('Ngày đăng', 'ngay_dang', { type: 'date', value: todayStr() })}
         <div class="full callout">${icon('zap', 'sm')}<div>Hồ sơ apply mang mã tin này sẽ được hệ thống <b>tự động gắn</b> vào vị trí <b>${Code.ct(ct.id)}</b>. Hồ sơ đang ở danh sách chờ gán có cùng mã cũng được gắn ngay.</div></div>
-        ${tins.length ? `<div class="full"><div class="field"><label>Tin đã gắn</label></div>${tins.map((t) => `<div class="row between small" style="padding:6px 0;border-bottom:1px solid var(--border)"><span><span class="code">${esc(t.ma_tin_kenh)}</span> ${esc(Store.get('kenh_dang_tuyen', t.ma_kenh).ten_kenh)} · ${fmtDate(t.ngay_dang)}</span><span class="row">${badge(t.trang_thai, 'sm')}${t.trang_thai === 'Đang đăng' ? `<button type="button" class="btn xs" data-rm="${t.id}">Gỡ tin</button>` : ''}</span></div>`).join('')}</div>` : ''}</form>` });
+        ${tins.length ? `<div class="full"><div class="field"><label>Tin đã gắn</label></div>${tins.map((t) => `<div class="row between small" style="padding:6px 0;border-bottom:1px solid var(--border)"><span><span class="code">${esc(t.ma_tin_kenh)}</span> ${esc(Store.get('kenh_dang_tuyen', t.ma_kenh).ten_kenh)} · ${fmtDate(t.ngay_dang)}</span><span class="row">${badge(t.trang_thai, 'sm')}${t.trang_thai === 'Đang đăng' ? `${act('trash', 'Gỡ tin', `data-rm="${t.id}"`, 'danger', 'Ngừng nhận hồ sơ từ mã tin này')}` : ''}</span></div>`).join('')}</div>` : ''}</form>` });
     m.$('[name=ma_kenh]').onchange = (e) => { const k = Store.get('kenh_dang_tuyen', e.target.value); if (k && !m.$('[name=ma_tin_kenh]').value) m.$('[name=ma_tin_kenh]').value = k.tien_to + '-'; };
     m.$$('[data-rm]').forEach((b) => (b.onclick = () => { Svc.removePosting(Number(b.dataset.rm)); toast('Đã gỡ tin đăng'); m.close(); UI.refresh(); }));
     submitForm(m, (v) => { const r = Svc.attachPosting(ct.id, v); if (r.ok) doneThen(m, `Đã gắn mã tin ${r.row.ma_tin_kenh}` + (r.matched ? ` · tự động gắn ${r.matched} hồ sơ chờ gán` : ''))(r); return r; });
@@ -285,9 +285,8 @@ const Dlg = {
       e.preventDefault();
       const opt = { dinh_kem_cv: f.cv.checked, dinh_kem_ds: f.ds.checked, dinh_dang_ds: fmt, loi_nhan: f.loi_nhan.value };
       if (!opt.dinh_kem_cv && !opt.dinh_kem_ds) return toast('Chọn ít nhất một loại tệp đính kèm khi gửi khách hàng.', 'err');
-      const names = files(); const r = Svc.sendToClient(ds.map((d) => d.id), opt); if (!r.ok) return toast(r.error, 'err');
-      if (opt.dinh_kem_ds) groups.forEach((g, i) => Dlg.recListFile(g.list, names[i], fmt));
-      m.close(); toast(`Đã gửi ${r.sent} đề cử cho khách hàng${opt.dinh_kem_ds ? ' · đã tạo ' + names.join(', ') : ''}`); then ? then() : UI.refresh();
+      const r = Svc.sendToClient(ds.map((d) => d.id), opt); if (!r.ok) return toast(r.error, 'err');
+      m.close(); toast(`Đã gửi ${r.sent} đề cử cho khách hàng`); then ? then() : UI.refresh();
     };
   },
   /** Dữ liệu của tệp danh sách đề cử gửi khách hàng */
@@ -295,10 +294,6 @@ const Dlg = {
     const headers = ['STT', 'Họ tên', 'Năm sinh', 'Email', 'Số điện thoại', 'Số năm kinh nghiệm', 'Mức lương mong muốn (VND)', 'Notice period', 'Đợt đề cử'];
     const rows = list.map((d, i) => { const u = Q.uv(Q.hs(d.ma_ho_so_ung_vien).ma_ung_vien); return [i + 1, u.ho_ten, u.nam_sinh || '', u.email, u.so_dien_thoai, d.so_nam_kinh_nghiem ?? '', d.muc_luong_mong_muon != null ? Number(d.muc_luong_mong_muon) : '', d.notice_period || '', d.dot_de_cu]; });
     return { headers, rows };
-  },
-  recListFile(list, name, fmt) {
-    const { headers, rows } = this.recListData(list); const ct = Q.ct(Q.hs(list[0].ma_ho_so_ung_vien).ma_chi_tiet_du_an);
-    if (fmt === 'sheet') Export.csv(name, headers, rows); else Export.excel(name.replace(/\.xlsx$/, ''), `Danh sách đề cử — ${ct.vi_tri} (${Code.ct(ct.id)}) — ${Q.khOfCt(ct).ten_cong_ty}`, headers, rows, { silent: true });
   },
   recListPreview(list, name) {
     const { headers, rows } = this.recListData(list);
